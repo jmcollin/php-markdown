@@ -1,24 +1,21 @@
-name: Release Draft
+name: Release draft ✏️
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - main
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
 
 jobs:
   draft:
-    name: Create release draft
+    name: Update release draft
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Create draft release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
+      - uses: release-drafter/release-drafter@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
