@@ -357,4 +357,14 @@ final class RendererTest extends TestCase
         ])]);
         $this->assertSame('<ul><li>plain</li></ul>', $out);
     }
+
+    public function testCheckedListItemWithNoChildrenHasTrailingSpace(): void
+    {
+        // Pins behavior: checkbox + space separator even when children render to ''.
+        // Guards against silent removal of the separator in future refactors.
+        $out = $this->render([new ListNode(false, [
+            new ListItemNode([], checked: true),
+        ])]);
+        $this->assertSame('<ul><li><input type="checkbox" disabled checked> </li></ul>', $out);
+    }
 }

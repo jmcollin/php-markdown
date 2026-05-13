@@ -332,8 +332,19 @@ final class MarkdownParserTest extends TestCase
     public function testInlineContentInTaskItem(): void
     {
         $html = $this->parser->parse('- [x] **bold** done');
-        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
-        $this->assertStringContainsString('<strong>bold</strong>', $html);
+        $this->assertMatchesRegularExpression(
+            '/<li><input type="checkbox" disabled checked> <strong>bold<\/strong>/',
+            $html,
+        );
+    }
+
+    public function testTaskItemWithNoTextAfterMarkerIsPlainItem(): void
+    {
+        // "- [x] " has no content after the space; trim('[x] ') = '[x]'
+        // which doesn't satisfy \s+ in extractTaskChecked → plain item.
+        $html = $this->parser->parse("- [x] \n- text");
+        $this->assertStringNotContainsString('<input', $html);
+        $this->assertStringContainsString('<li>[x]</li>', $html);
     }
 
     public function testOrderedTaskList(): void
