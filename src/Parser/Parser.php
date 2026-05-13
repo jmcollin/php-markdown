@@ -87,7 +87,7 @@ final class Parser
             }
 
             if ($token->type === TokenType::LIST_ITEM) {
-                $children[] = $this->buildList($tokens, $i, 0);
+                $children[] = $this->buildList($tokens, $i, $tokens[$i]->meta['depth']);
                 continue;
             }
 
@@ -130,6 +130,7 @@ final class Parser
         while ($i < $count
             && $tokens[$i]->type === TokenType::LIST_ITEM
             && $tokens[$i]->meta['depth'] === $depth
+            && $tokens[$i]->meta['ordered'] === $ordered
         ) {
             $inlineChildren = $this->inlineParser->parse($tokens[$i]->content);
             $i++;
@@ -139,8 +140,9 @@ final class Parser
             if ($i < $count
                 && $tokens[$i]->type === TokenType::LIST_ITEM
                 && $tokens[$i]->meta['depth'] > $depth
+                && $depth < 32
             ) {
-                $subList      = $this->buildList($tokens, $i, $depth + 1);
+                $subList      = $this->buildList($tokens, $i, $tokens[$i]->meta['depth']);
                 $nodeChildren = [...$inlineChildren, $subList];
             }
 
