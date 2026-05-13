@@ -220,4 +220,48 @@ final class MarkdownParserTest extends TestCase
 
         $this->assertSame("caf{$nfc}", $result['meta']['title']);
     }
+
+    // ── Nested lists ──────────────────────────────────────────────────────────
+
+    public function testSimpleNestedList(): void
+    {
+        $md = "- a\n  - b\n  - c\n- d";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>', $html);
+    }
+
+    public function testThreeLevelNesting(): void
+    {
+        $md = "- a\n  - b\n    - c";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>', $html);
+    }
+
+    public function testMixedNestingTypes(): void
+    {
+        $md = "1. first\n   - nested\n2. second";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li><li>second</li></ol>', $html);
+    }
+
+    public function testFlatListUnchanged(): void
+    {
+        $md = "- a\n- b\n- c";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a</li><li>b</li><li>c</li></ul>', $html);
+    }
+
+    public function testInlineContentInNestedItem(): void
+    {
+        $md = "- **bold**\n  - _em_";
+        $html = $this->parser->parse($md);
+
+        $this->assertStringContainsString('<strong>bold</strong>', $html);
+        $this->assertStringContainsString('<em>em</em>', $html);
+        $this->assertStringContainsString('<ul><li>', $html);
+    }
 }

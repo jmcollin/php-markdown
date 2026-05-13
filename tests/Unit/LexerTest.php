@@ -156,4 +156,51 @@ final class LexerTest extends TestCase
         $this->assertStringContainsString('title="tooltip"', $html);
         $this->assertStringContainsString('alt="alt"', $html);
     }
+
+    // ── Nested list depth ────────────────────────────────────────────────────
+
+    public function testListItemDepthZero(): void
+    {
+        $tokens = $this->lexer->tokenize('- item');
+
+        $this->assertSame(0, $tokens[0]->meta['depth']);
+    }
+
+    public function testListItemDepthOne(): void
+    {
+        $tokens = $this->lexer->tokenize('  - item');
+
+        $this->assertSame(1, $tokens[0]->meta['depth']);
+    }
+
+    public function testListItemDepthTwo(): void
+    {
+        $tokens = $this->lexer->tokenize('    - item');
+
+        $this->assertSame(2, $tokens[0]->meta['depth']);
+    }
+
+    public function testOrderedListItemDepth(): void
+    {
+        $tokens = $this->lexer->tokenize('  1. item');
+
+        $this->assertTrue($tokens[0]->meta['ordered']);
+        $this->assertSame(1, $tokens[0]->meta['depth']);
+    }
+
+    public function testListItemContentUnchanged(): void
+    {
+        $tokens = $this->lexer->tokenize('  - hello world');
+
+        $this->assertSame('hello world', $tokens[0]->content);
+        $this->assertSame(1, $tokens[0]->meta['depth']);
+    }
+
+    public function testNestedListTokenDepths(): void
+    {
+        $tokens = $this->lexer->tokenize("- a\n  - b");
+
+        $this->assertSame(0, $tokens[0]->meta['depth']);
+        $this->assertSame(1, $tokens[1]->meta['depth']);
+    }
 }

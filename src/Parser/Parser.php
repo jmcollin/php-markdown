@@ -87,15 +87,7 @@ final class Parser
             }
 
             if ($token->type === TokenType::LIST_ITEM) {
-                $ordered = $token->meta['ordered'];
-                $items = [];
-                while ($i < $count && $tokens[$i]->type === TokenType::LIST_ITEM && $tokens[$i]->meta['ordered'] === $ordered) {
-                    $items[] = new ListItemNode(
-                        children: $this->inlineParser->parse($tokens[$i]->content),
-                    );
-                    $i++;
-                }
-                $children[] = new ListNode(ordered: $ordered, children: $items);
+                $children[] = $this->buildList($tokens, $i, 0);
                 continue;
             }
 
@@ -122,6 +114,40 @@ final class Parser
         }
 
         return new DocumentNode($children);
+    }
+
+    /**
+     * Recursively build a ListNode from a flat sequence of LIST_ITEM tokens.
+     *
+     * @param Token[] $tokens
+     */
+    private function buildList(array $tokens, int &$i, int $depth): ListNode
+    {
+        $count   = count($tokens);
+        $ordered = $tokens[$i]->meta['ordered'];
+        $items   = [];
+
+        while ($i < $count
+            && $tokens[$i]->type === TokenType::LIST_ITEM
+            && $tokens[$i]->meta['depth'] === $depth
+        ) {
+            $inlineChildren = $this->inlineParser->parse($tokens[$i]->content);
+            $i++;
+
+            // If the next token is a deeper-level list item, recurse.
+            $nodeChildren = $inlineChildren;
+            if ($i < $count
+                && $tokens[$i]->type === TokenType::LIST_ITEM
+                && $tokens[$i]->meta['depth'] > $depth
+            ) {
+                $subList      = $this->buildList($tokens, $i, $depth + 1);
+                $nodeChildren = [...$inlineChildren, $subList];
+            }
+
+            $items[] = new ListItemNode(children: $nodeChildren);
+        }
+
+        return new ListNode(ordered: $ordered, children: $items);
     }
 
     /**
