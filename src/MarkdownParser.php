@@ -59,7 +59,8 @@ final class MarkdownParser
         if (!mb_check_encoding($markdown, 'UTF-8')) {
             throw new ParseException('Input must be valid UTF-8.');
         }
-        $markdown = $this->normalizer->normalize($markdown) ?: $markdown;
+        $normalized = $this->normalizer->normalize($markdown);
+        $markdown = $normalized !== false ? $normalized : $markdown;
     }
 
     /**

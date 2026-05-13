@@ -95,7 +95,7 @@ final class HtmlRenderer
         }
 
         $classAttr = ($lang ?? '') !== ''
-            ? ' class="' . $this->esc('language-' . $lang) . '"'
+            ? ' class="' . $this->esc('language-' . (string) $lang) . '"'
             : '';
         return '<pre><code' . $classAttr . '>' . $this->esc($node->content) . '</code></pre>';
     }
