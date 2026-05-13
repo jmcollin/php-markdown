@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\InlineNodeInterface;
@@ -114,6 +115,24 @@ final class InlineParser
                     $pos += strlen($m[0]);
                     continue;
                 }
+            }
+
+            // ── Strikethrough: ~~text~~ ──────────────────────────────────────
+            if ($char === '~' && isset($text[$pos + 1]) && $text[$pos + 1] === '~') {
+                $closePos = strpos($text, '~~', $pos + 2);
+                if ($closePos !== false) {
+                    $inner = substr($text, $pos + 2, $closePos - $pos - 2);
+                    if ($inner !== '') {
+                        $nodes = $this->flushBuffer($buffer, $nodes);
+                        $buffer = '';
+                        $nodes[] = new StrikethroughNode($this->scan($inner, $depth + 1));
+                        $pos = $closePos + 2;
+                        continue;
+                    }
+                }
+                $buffer .= '~~';
+                $pos += 2;
+                continue;
             }
 
             // ── Strong: **text** or __text__ ──────────────────────────────────

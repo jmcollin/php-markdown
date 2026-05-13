@@ -20,6 +20,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\NodeInterface;
@@ -49,6 +50,7 @@ final class HtmlRenderer
             $node instanceof HorizontalRuleNode => '<hr>',
             $node instanceof TextNode         => $this->esc($node->text),
             $node instanceof StrongNode       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
+            $node instanceof StrikethroughNode => '<del>' . $this->renderChildren($node->children) . '</del>',
             $node instanceof EmphasisNode     => '<em>' . $this->renderChildren($node->children) . '</em>',
             $node instanceof CodeNode         => '<code>' . $this->esc($node->code) . '</code>',
             $node instanceof LinkNode         => $this->renderLink($node),

@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Parser\InlineParser;
@@ -199,6 +200,66 @@ final class InlineParserTest extends TestCase
         // Angle brackets excluded from URL capture — the whole thing is a TextNode
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
+    }
+
+    public function testStrikethroughSimple(): void
+    {
+        $nodes = $this->parser->parse('~~foo~~');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(StrikethroughNode::class, $nodes[0]);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]->children[0]);
+        $this->assertSame('foo', $nodes[0]->children[0]->text);
+    }
+
+    public function testStrikethroughUnclosed(): void
+    {
+        $nodes = $this->parser->parse('~~unclosed');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('~~unclosed', $nodes[0]->text);
+    }
+
+    public function testStrikethroughSingleTildeNotAffected(): void
+    {
+        $nodes = $this->parser->parse('~not~');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('~not~', $nodes[0]->text);
+    }
+
+    public function testStrikethroughEmpty(): void
+    {
+        $nodes = $this->parser->parse('~~~~');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('~~~~', $nodes[0]->text);
+    }
+
+    public function testStrikethroughWithNestedStrong(): void
+    {
+        $nodes = $this->parser->parse('~~**bold**~~');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(StrikethroughNode::class, $nodes[0]);
+        $this->assertInstanceOf(StrongNode::class, $nodes[0]->children[0]);
+        $this->assertSame('bold', $nodes[0]->children[0]->children[0]->text);
+    }
+
+    public function testStrikethroughMixedSurroundingText(): void
+    {
+        $nodes = $this->parser->parse('foo ~~bar~~ baz');
+
+        $this->assertCount(3, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('foo ', $nodes[0]->text);
+        $this->assertInstanceOf(StrikethroughNode::class, $nodes[1]);
+        $this->assertSame('bar', $nodes[1]->children[0]->text);
+        $this->assertInstanceOf(TextNode::class, $nodes[2]);
+        $this->assertSame(' baz', $nodes[2]->text);
     }
 
     public function testDepthLimitDoesNotCrash(): void

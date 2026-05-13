@@ -19,6 +19,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Renderer\HtmlRenderer;
@@ -283,6 +284,20 @@ final class RendererTest extends TestCase
         ]);
         $this->assertStringContainsString('<div class="mermaid">graph TD;</div>', $out);
         $this->assertStringContainsString('<pre><code class="language-php">', $out);
+    }
+
+    // ── Strikethrough rendering ──────────────────────────────────────────────
+
+    public function testStrikethroughRendered(): void
+    {
+        $out = $this->render([new ParagraphNode([new StrikethroughNode([new TextNode('foo')])])]);
+        $this->assertSame('<p><del>foo</del></p>', $out);
+    }
+
+    public function testStrikethroughXssEscaped(): void
+    {
+        $out = $this->render([new ParagraphNode([new StrikethroughNode([new TextNode('<b>')])])]);
+        $this->assertSame('<p><del>&lt;b&gt;</del></p>', $out);
     }
 
     // ── Nested list rendering ────────────────────────────────────────────────
