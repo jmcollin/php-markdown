@@ -1,8 +1,8 @@
 # php-markdown
 
-A lightweight, standalone PHP 8.3 library that parses CommonMark-flavored Markdown and converts it into clean, semantic HTML5. **Zero runtime dependencies.**
+A lightweight, standalone PHP library (8.2–8.4) that parses CommonMark-flavored Markdown and converts it into clean, semantic HTML5. **Zero runtime dependencies.**
 
-![PHP](https://img.shields.io/badge/PHP-8.3%2B-blue)
+![PHP](https://img.shields.io/badge/PHP-8.2%20to%208.4-blue)
 ![PSR-12](https://img.shields.io/badge/style-PSR--12-brightgreen)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -11,7 +11,7 @@ A lightweight, standalone PHP 8.3 library that parses CommonMark-flavored Markdo
 
 ## Requirements
 
-- PHP **8.3** or higher
+- PHP **8.2** to **8.4**
 - No external packages required for core usage
 
 ---
@@ -175,7 +175,7 @@ Input string
 | `FrontMatterParser` | Extracts and parses the YAML-subset front matter block |
 | `MarkdownParser` | Public façade — wires all stages together |
 
-All AST nodes are **immutable** (`readonly` properties, PHP 8.3).
+All AST nodes are **immutable** (`readonly` properties, PHP 8.2+).
 
 ---
 
