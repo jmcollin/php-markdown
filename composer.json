@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    "php": ">=8.3",
+    "php": ">=8.2",
     "ext-ctype": "*",
     "ext-intl": "*",
     "ext-mbstring": "*"
@@ -24,7 +24,9 @@
     "psr-4": {
       "PhpMarkdown\\": "src/"
     },
-    "exclude-from-classmap": ["tests/"]
+    "exclude-from-classmap": [
+      "tests/"
+    ]
   },
   "autoload-dev": {
     "psr-4": {

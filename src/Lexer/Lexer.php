@@ -61,7 +61,7 @@ final class Lexer
 
             if (preg_match(self::PATTERN_FENCED_OPEN, $line, $m)) {
                 $inFencedBlock = true;
-                $fencedLanguage = $m[2] ?? '';
+                $fencedLanguage = $m[2];
                 $fencedLines = [];
                 continue;
             }
