@@ -262,6 +262,20 @@ final class InlineParserTest extends TestCase
         $this->assertSame(' baz', $nodes[2]->text);
     }
 
+    public function testStrikethroughNestedClosestMatch(): void
+    {
+        // ~~a ~~b~~ c~~ — closest-match closes outer at first ~~, producing two separate dels
+        $nodes = $this->parser->parse('~~a ~~b~~ c~~');
+
+        $this->assertCount(3, $nodes);
+        $this->assertInstanceOf(StrikethroughNode::class, $nodes[0]);
+        $this->assertSame('a ', $nodes[0]->children[0]->text);
+        $this->assertInstanceOf(TextNode::class, $nodes[1]);
+        $this->assertSame('b', $nodes[1]->text);
+        $this->assertInstanceOf(StrikethroughNode::class, $nodes[2]);
+        $this->assertSame(' c', $nodes[2]->children[0]->text);
+    }
+
     public function testDepthLimitDoesNotCrash(): void
     {
         // Deeply nested emphasis must not overflow the stack
