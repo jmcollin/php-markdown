@@ -1,0 +1,19 @@
+services:
+  playground:
+    build:
+      context: ./playground
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/var/www/html/src:ro
+      - ./playground/public:/var/www/html/public:ro
+      - ./playground/bootstrap.php:/var/www/html/bootstrap.php:ro
+      - ./vendor:/var/www/html/vendor:ro
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s

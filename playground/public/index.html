@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>php-markdown Playground</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  background: #f0f0f0;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 8px 16px;
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+#error-msg {
+  display: none;
+  padding: 8px 16px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-bottom: 1px solid #fca5a5;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+form {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+textarea {
+  resize: none;
+  border: none;
+  border-right: 2px solid #cbd5e1;
+  padding: 16px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  background: #fff;
+  color: #1e293b;
+}
+iframe {
+  border: none;
+  background: #fff;
+  width: 100%;
+  height: 100%;
+}
+#submit-btn {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  padding: 8px 18px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+#submit-btn:hover { background: #1d4ed8; }
+</style>
+</head>
+<body>
+<header>php-markdown Playground</header>
+<div id="error-msg"></div>
+<form method="post" action="/render">
+<textarea id="md-input" name="markdown" spellcheck="false"># Hello, Markdown!
+
+This is **bold** and this is *italic*.
+
+## List example
+
+- Item one
+- Item two
+- Item three
+
+## Code example
+
+```php
+echo Michelf\Markdown::defaultTransform($markdown);
+```
+</textarea>
+<!-- allow-scripts: required for Mermaid.js to execute inside srcdoc.
+     No allow-same-origin: sandboxed iframe gets an opaque origin, preventing access to
+     window.parent and parent DOM. Safe for script execution of the vendored Mermaid.js.
+     The vendor script is served with Access-Control-Allow-Origin:* (.htaccess) so SRI
+     enforcement works from the opaque-origin frame. -->
+<iframe id="preview" sandbox="allow-scripts"></iframe>
+<button type="submit" id="submit-btn">Render</button>
+</form>
+<script>
+(function () {
+  var btn = document.getElementById('submit-btn');
+  btn.style.display = 'none';
+
+  var input = document.getElementById('md-input');
+  var preview = document.getElementById('preview');
+  var errorMsg = document.getElementById('error-msg');
+  var timer = null;
+
+  // Mermaid 11.14.0 — vendored at /vendor/mermaid.min.js (no CDN dependency).
+  // SRI hash: PowerShell SHA384 on the downloaded artifact — bump version + hash together.
+  //   [System.Security.Cryptography.SHA384]::Create().ComputeHash(file_bytes) | base64
+  // securityLevel:'strict' required (CVE-2021-43119; never use 'loose').
+  // <base href="/"> resolves /vendor/... relative to server root inside srcdoc.
+  var MERMAID_SNIPPET =
+    '<base href="/">' +
+    '<script src="/vendor/mermaid.min.js"' +
+    ' integrity="sha384-1CMXl090wj8Dd6YfnzSQUOgWbE6suWCaenYG7pox5AX7apTpY3PmJMeS2oPql4Gk"' +
+    ' crossorigin="anonymous"><\/script>' +
+    '<script>if(typeof mermaid!=="undefined"){' +
+    'mermaid.initialize({startOnLoad:true,securityLevel:"strict"});' +
+    '}<\/script>';
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = 'block';
+  }
+
+  function hideError() {
+    errorMsg.style.display = 'none';
+  }
+
+  function render(value) {
+    fetch('/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: value })
+    })
+      .then(function (res) {
+        if (res.ok) {
+          return res.json().then(function (data) {
+            hideError();
+            preview.srcdoc = MERMAID_SNIPPET + data.html;
+          });
+        }
+        if (res.status === 413) {
+          showError('Input too large (max 64 KB).');
+        } else {
+          showError('Render failed (HTTP ' + res.status + ').');
+        }
+      })
+      .catch(function () {
+        showError('Could not reach the render server. Is the playground running?');
+      });
+  }
+
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      render(input.value);
+    }, 400);
+  });
+
+  render(input.value);
+}());
+</script>
+</body>
+</html>

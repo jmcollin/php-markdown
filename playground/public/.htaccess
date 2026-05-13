@@ -1,0 +1,11 @@
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [QSA,L]
+
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+
+# CORS for vendor JS — required for SRI enforcement from sandboxed srcdoc iframes (opaque origin)
+<FilesMatch "\.js$">
+    Header always set Access-Control-Allow-Origin "*"
+</FilesMatch>
