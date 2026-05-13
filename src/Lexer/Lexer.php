@@ -16,8 +16,8 @@ final class Lexer
     private const PATTERN_FENCED_OPEN    = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
     private const PATTERN_FENCED_CLOSE   = '/^`{3,}$/';
     private const PATTERN_BLOCKQUOTE     = '/^(>+)\s*(.*)/';
-    private const PATTERN_UNORDERED_LIST = '/^[-*+]\s+(.+)/';
-    private const PATTERN_ORDERED_LIST   = '/^\d+\.\s+(.+)/';
+    private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
+    private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
     private const PATTERN_TABLE_ROW       = '/^\|?.+\|.+\|?$/';
     private const PATTERN_TABLE_SEPARATOR = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
@@ -110,16 +110,16 @@ final class Lexer
         if (preg_match(self::PATTERN_UNORDERED_LIST, $line, $m)) {
             return new Token(
                 TokenType::LIST_ITEM,
-                trim($m[1]),
-                ['ordered' => false],
+                trim($m[2]),
+                ['ordered' => false, 'depth' => (int) floor(strlen($m[1]) / 2)],
             );
         }
 
         if (preg_match(self::PATTERN_ORDERED_LIST, $line, $m)) {
             return new Token(
                 TokenType::LIST_ITEM,
-                trim($m[1]),
-                ['ordered' => true],
+                trim($m[2]),
+                ['ordered' => true, 'depth' => (int) floor(strlen($m[1]) / 2)],
             );
         }
 

@@ -284,4 +284,36 @@ final class RendererTest extends TestCase
         $this->assertStringContainsString('<div class="mermaid">graph TD;</div>', $out);
         $this->assertStringContainsString('<pre><code class="language-php">', $out);
     }
+
+    // ── Nested list rendering ────────────────────────────────────────────────
+
+    public function testNestedUnorderedList(): void
+    {
+        $out = $this->render([
+            new ListNode(false, [
+                new ListItemNode([
+                    new TextNode('a'),
+                    new ListNode(false, [
+                        new ListItemNode([new TextNode('b')]),
+                    ]),
+                ]),
+            ]),
+        ]);
+        $this->assertSame('<ul><li>a<ul><li>b</li></ul></li></ul>', $out);
+    }
+
+    public function testMixedOrderedUnorderedNesting(): void
+    {
+        $out = $this->render([
+            new ListNode(true, [
+                new ListItemNode([
+                    new TextNode('first'),
+                    new ListNode(false, [
+                        new ListItemNode([new TextNode('nested')]),
+                    ]),
+                ]),
+            ]),
+        ]);
+        $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li></ol>', $out);
+    }
 }

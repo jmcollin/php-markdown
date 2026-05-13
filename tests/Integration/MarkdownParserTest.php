@@ -220,4 +220,90 @@ final class MarkdownParserTest extends TestCase
 
         $this->assertSame("caf{$nfc}", $result['meta']['title']);
     }
+
+    // ── Nested lists ──────────────────────────────────────────────────────────
+
+    public function testSimpleNestedList(): void
+    {
+        $md = "- a\n  - b\n  - c\n- d";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>', $html);
+    }
+
+    public function testThreeLevelNesting(): void
+    {
+        $md = "- a\n  - b\n    - c";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>', $html);
+    }
+
+    public function testMixedNestingTypes(): void
+    {
+        $md = "1. first\n   - nested\n2. second";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li><li>second</li></ol>', $html);
+    }
+
+    public function testFlatListUnchanged(): void
+    {
+        $md = "- a\n- b\n- c";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>a</li><li>b</li><li>c</li></ul>', $html);
+    }
+
+    public function testInlineContentInNestedItem(): void
+    {
+        $md = "- **bold**\n  - _em_";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<ul><li><strong>bold</strong><ul><li><em>em</em></li></ul></li></ul>',
+            $html
+        );
+    }
+
+    public function testLargeDepthGapCollapsesToDirectNesting(): void
+    {
+        // 20 spaces = depth 10; should nest directly under depth 0 (no intermediate empty levels)
+        $md = "- top\n" . str_repeat(' ', 20) . "- deep";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>top<ul><li>deep</li></ul></li></ul>', $html);
+    }
+
+    public function testUlFollowedByOlAtSameDepthProducesTwoSeparateLists(): void
+    {
+        // The ordered guard (meta['ordered'] === $ordered) must break the while-loop
+        // when list type changes at the same depth, producing two sibling lists.
+        $md = "- ul item\n1. ol item";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<ul><li>ul item</li></ul><ol><li>ol item</li></ol>', $html);
+    }
+
+    public function testDepthCapAt32DoesNotCrashAndProducesTwoLists(): void
+    {
+        // The $depth < 32 guard fires when the PARENT is at depth=32 and a child
+        // would go deeper. Build a 32-level chain ending with a depth-33 item.
+        // depth = floor(spaces / 2); depth 32 = 64 spaces, depth 33 = 66 spaces.
+        $lines   = [];
+        $lines[] = '- root'; // depth 0
+        for ($d = 1; $d <= 32; $d++) {
+            $lines[] = str_repeat(' ', $d * 2) . '- item' . $d; // depth 1..32
+        }
+        // Add one item beyond the cap: depth 33 = 66 spaces
+        $lines[] = str_repeat(' ', 66) . '- overflow';
+        $md = implode("\n", $lines);
+
+        // Must not throw regardless of output shape.
+        $html = $this->parser->parse($md);
+
+        $this->assertStringContainsString('<ul>', $html);
+        $this->assertStringContainsString('root', $html);
+        $this->assertStringContainsString('overflow', $html);
+    }
 }
