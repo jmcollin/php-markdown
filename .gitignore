@@ -1,0 +1,84 @@
+.tokensave
+.worktrees
+
+### PHPUnit ###
+# Covers PHPUnit
+# Reference: https://phpunit.de/
+
+# Generated files
+.phpunit.result.cache
+.phpunit.cache
+
+# PHPUnit
+/app/phpunit.xml
+/phpunit.xml
+
+# Logs
+/logs/
+*.log
+
+# Build data
+/build/
+
+# Composer
+composer.phar
+/vendor/
+
+# PHPStan, Psalm
+.phpstan-cache/
+.psalm/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (PHPStorm, WebStorm, etc.)
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Zed
+.zed/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Claude & Claude Code
+.claude/
+claude_session.json
+.anthropic/
+
+# Gemini / Google Cloud
+.google/
+.aistudio/
+*.proactive_state
+
+# AI Coding Assistants
+.cline/
+.roocode/
+.continue/
+.prompts/custom-instructions.md
+
+# AI Generated Reports
+ai_audit_report.md
+analysis_results.json
+token_usage.log
