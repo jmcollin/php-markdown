@@ -18,6 +18,8 @@ use PhpMarkdown\Renderer\HtmlRenderer;
  * Usage:
  *   $html = (new MarkdownParser())->parse($markdownString);
  *   ['html' => $html, 'meta' => $meta] = (new MarkdownParser())->parseWithMeta($markdownString);
+ *
+ * @psalm-api
  */
 final class MarkdownParser
 {
