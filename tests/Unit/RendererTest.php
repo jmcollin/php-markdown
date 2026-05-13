@@ -331,4 +331,30 @@ final class RendererTest extends TestCase
         ]);
         $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li></ol>', $out);
     }
+
+    // ── Task list (checkbox) rendering ───────────────────────────────────────
+
+    public function testCheckedListItemRendersCheckbox(): void
+    {
+        $out = $this->render([new ListNode(false, [
+            new ListItemNode([new TextNode('Done')], checked: true),
+        ])]);
+        $this->assertSame('<ul><li><input type="checkbox" disabled checked> Done</li></ul>', $out);
+    }
+
+    public function testUncheckedListItemRendersCheckbox(): void
+    {
+        $out = $this->render([new ListNode(false, [
+            new ListItemNode([new TextNode('Todo')], checked: false),
+        ])]);
+        $this->assertSame('<ul><li><input type="checkbox" disabled> Todo</li></ul>', $out);
+    }
+
+    public function testPlainListItemNoCheckbox(): void
+    {
+        $out = $this->render([new ListNode(false, [
+            new ListItemNode([new TextNode('plain')], checked: null),
+        ])]);
+        $this->assertSame('<ul><li>plain</li></ul>', $out);
+    }
 }

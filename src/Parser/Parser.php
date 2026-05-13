@@ -132,7 +132,8 @@ final class Parser
             && $tokens[$i]->meta['depth'] === $depth
             && $tokens[$i]->meta['ordered'] === $ordered
         ) {
-            $inlineChildren = $this->inlineParser->parse($tokens[$i]->content);
+            $itemToken      = $tokens[$i];
+            $inlineChildren = $this->inlineParser->parse($itemToken->content);
             $i++;
 
             // If the next token is a deeper-level list item, recurse.
@@ -146,7 +147,7 @@ final class Parser
                 $nodeChildren = [...$inlineChildren, $subList];
             }
 
-            $items[] = new ListItemNode(children: $nodeChildren);
+            $items[] = new ListItemNode(children: $nodeChildren, checked: $itemToken->meta['checked'] ?? null);
         }
 
         return new ListNode(ordered: $ordered, children: $items);

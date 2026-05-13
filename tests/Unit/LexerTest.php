@@ -203,4 +203,46 @@ final class LexerTest extends TestCase
         $this->assertSame(0, $tokens[0]->meta['depth']);
         $this->assertSame(1, $tokens[1]->meta['depth']);
     }
+
+    // ── Task list (checkbox) tokens ──────────────────────────────────────────
+
+    public function testCheckedTaskItemSetsCheckedTrue(): void
+    {
+        $tokens = $this->lexer->tokenize('- [x] Done');
+
+        $this->assertSame(TokenType::LIST_ITEM, $tokens[0]->type);
+        $this->assertTrue($tokens[0]->meta['checked']);
+        $this->assertSame('Done', $tokens[0]->content);
+    }
+
+    public function testUncheckedTaskItemSetsCheckedFalse(): void
+    {
+        $tokens = $this->lexer->tokenize('- [ ] Todo');
+
+        $this->assertFalse($tokens[0]->meta['checked']);
+        $this->assertSame('Todo', $tokens[0]->content);
+    }
+
+    public function testPlainListItemCheckedIsNull(): void
+    {
+        $tokens = $this->lexer->tokenize('- plain');
+
+        $this->assertNull($tokens[0]->meta['checked']);
+    }
+
+    public function testUppercaseXTaskItemIsChecked(): void
+    {
+        $tokens = $this->lexer->tokenize('- [X] Done');
+
+        $this->assertTrue($tokens[0]->meta['checked']);
+        $this->assertSame('Done', $tokens[0]->content);
+    }
+
+    public function testOrderedTaskItemChecked(): void
+    {
+        $tokens = $this->lexer->tokenize('1. [x] first');
+
+        $this->assertTrue($tokens[0]->meta['checked']);
+        $this->assertSame('first', $tokens[0]->content);
+    }
 }
