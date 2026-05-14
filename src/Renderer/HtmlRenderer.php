@@ -45,7 +45,7 @@ final class HtmlRenderer
             $node instanceof ParagraphNode    => '<p>' . $this->renderChildren($node->children) . '</p>',
             $node instanceof BlockquoteNode   => '<blockquote>' . $this->renderChildren($node->children) . '</blockquote>',
             $node instanceof ListNode         => $this->renderList($node),
-            $node instanceof ListItemNode     => '<li>' . $this->renderChildren($node->children) . '</li>',
+            $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
             $node instanceof HorizontalRuleNode => '<hr>',
             $node instanceof TextNode         => $this->esc($node->text),
@@ -79,6 +79,15 @@ final class HtmlRenderer
     {
         $tag = $node->ordered ? 'ol' : 'ul';
         return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+    }
+
+    private function renderListItem(ListItemNode $node): string
+    {
+        if ($node->checked === null) {
+            return '<li>' . $this->renderChildren($node->children) . '</li>';
+        }
+        $checkbox = '<input type="checkbox" disabled' . ($node->checked ? ' checked' : '') . '>';
+        return '<li>' . $checkbox . ' ' . $this->renderChildren($node->children) . '</li>';
     }
 
     /**

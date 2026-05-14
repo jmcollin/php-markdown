@@ -81,6 +81,15 @@ final class Lexer
         return $tokens;
     }
 
+    /** @return array{string, ?bool} */
+    private function extractTaskChecked(string $content): array
+    {
+        if (preg_match('/^\[([ xX])\]\s+(.*)$/', $content, $m)) {
+            return [$m[2], $m[1] !== ' '];
+        }
+        return [$content, null];
+    }
+
     private function matchLine(string $line): Token
     {
         if ($line === '' || ctype_space($line)) {
@@ -108,18 +117,20 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_UNORDERED_LIST, $line, $m)) {
+            [$content, $checked] = $this->extractTaskChecked(trim($m[2]));
             return new Token(
                 TokenType::LIST_ITEM,
-                trim($m[2]),
-                ['ordered' => false, 'depth' => (int) floor(strlen($m[1]) / 2)],
+                $content,
+                ['ordered' => false, 'depth' => (int) floor(strlen($m[1]) / 2), 'checked' => $checked],
             );
         }
 
         if (preg_match(self::PATTERN_ORDERED_LIST, $line, $m)) {
+            [$content, $checked] = $this->extractTaskChecked(trim($m[2]));
             return new Token(
                 TokenType::LIST_ITEM,
-                trim($m[2]),
-                ['ordered' => true, 'depth' => (int) floor(strlen($m[1]) / 2)],
+                $content,
+                ['ordered' => true, 'depth' => (int) floor(strlen($m[1]) / 2), 'checked' => $checked],
             );
         }
 

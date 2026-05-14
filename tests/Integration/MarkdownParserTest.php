@@ -306,4 +306,58 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringContainsString('root', $html);
         $this->assertStringContainsString('overflow', $html);
     }
+
+    // ── Task lists ────────────────────────────────────────────────────────────
+
+    public function testCheckedTaskItemRendersCheckbox(): void
+    {
+        $html = $this->parser->parse('- [x] Done');
+        $this->assertSame('<ul><li><input type="checkbox" disabled checked> Done</li></ul>', $html);
+    }
+
+    public function testUncheckedTaskItemRendersCheckbox(): void
+    {
+        $html = $this->parser->parse('- [ ] Todo');
+        $this->assertSame('<ul><li><input type="checkbox" disabled> Todo</li></ul>', $html);
+    }
+
+    public function testMixedTaskList(): void
+    {
+        $html = $this->parser->parse("- [x] done\n- [ ] todo\n- plain");
+        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
+        $this->assertStringContainsString('<input type="checkbox" disabled>', $html);
+        $this->assertStringContainsString('<li>plain</li>', $html);
+    }
+
+    public function testInlineContentInTaskItem(): void
+    {
+        $html = $this->parser->parse('- [x] **bold** done');
+        $this->assertMatchesRegularExpression(
+            '/<li><input type="checkbox" disabled checked> <strong>bold<\/strong>/',
+            $html,
+        );
+    }
+
+    public function testTaskItemWithNoTextAfterMarkerIsPlainItem(): void
+    {
+        // "- [x] " has no content after the space; trim('[x] ') = '[x]'
+        // which doesn't satisfy \s+ in extractTaskChecked → plain item.
+        $html = $this->parser->parse("- [x] \n- text");
+        $this->assertStringNotContainsString('<input', $html);
+        $this->assertStringContainsString('<li>[x]</li>', $html);
+    }
+
+    public function testOrderedTaskList(): void
+    {
+        $html = $this->parser->parse("1. [x] first\n2. [ ] second");
+        $this->assertStringContainsString('<ol>', $html);
+        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
+        $this->assertStringContainsString('<input type="checkbox" disabled>', $html);
+    }
+
+    public function testUppercaseXChecked(): void
+    {
+        $html = $this->parser->parse('- [X] Done');
+        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
+    }
 }
