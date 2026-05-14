@@ -18,7 +18,8 @@ final class Lexer
     private const PATTERN_BLOCKQUOTE     = '/^(>+)\s*(.*)/';
     private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
-    private const PATTERN_HORIZONTAL_RULE = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_HORIZONTAL_RULE   = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_LINK_DEFINITION   = '/^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
     private const PATTERN_TABLE_ROW       = '/^\|?.+\|.+\|?$/';
     private const PATTERN_TABLE_SEPARATOR = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
 
@@ -141,6 +142,18 @@ final class Lexer
             if (preg_match(self::PATTERN_TABLE_ROW, $line)) {
                 return new Token(TokenType::TABLE_ROW, $line);
             }
+        }
+
+        if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
+            return new Token(
+                TokenType::LINK_DEFINITION,
+                $line,
+                [
+                    'label' => $m[1],
+                    'href'  => $m[2],
+                    'title' => isset($m[3]) && $m[3] !== '' ? $m[3] : null,
+                ],
+            );
         }
 
         return new Token(TokenType::PARAGRAPH, $line);

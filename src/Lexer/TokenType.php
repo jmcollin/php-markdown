@@ -15,4 +15,5 @@ enum TokenType
     case BLANK;
     case TABLE_ROW;
     case TABLE_SEPARATOR;
+    case LINK_DEFINITION;
 }

@@ -306,4 +306,105 @@ final class InlineParserTest extends TestCase
 
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
     }
+
+    // ── Reference links ───────────────────────────────────────────────────────
+
+    public function testBasicReferenceLink(): void
+    {
+        $refs = ['bar' => ['href' => 'https://example.com', 'title' => null]];
+        $nodes = $this->parser->parse('[foo][bar]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('https://example.com', $nodes[0]->href);
+        $this->assertNull($nodes[0]->title);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]->children[0]);
+        $this->assertSame('foo', $nodes[0]->children[0]->text);
+    }
+
+    public function testReferenceLinkWithTitle(): void
+    {
+        $refs = ['bar' => ['href' => 'https://example.com', 'title' => 'My Title']];
+        $nodes = $this->parser->parse('[foo][bar]', $refs);
+
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('My Title', $nodes[0]->title);
+    }
+
+    public function testCollapsedReferenceLink(): void
+    {
+        $refs = ['foo' => ['href' => 'https://example.com', 'title' => null]];
+        $nodes = $this->parser->parse('[foo][]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('https://example.com', $nodes[0]->href);
+        $this->assertSame('foo', $nodes[0]->children[0]->text);
+    }
+
+    public function testShortcutReferenceLink(): void
+    {
+        $refs = ['foo' => ['href' => 'https://example.com', 'title' => null]];
+        $nodes = $this->parser->parse('[foo]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('https://example.com', $nodes[0]->href);
+    }
+
+    public function testCaseInsensitiveLookup(): void
+    {
+        $refs = ['foo' => ['href' => 'https://example.com', 'title' => null]];
+        $nodes = $this->parser->parse('[bar][FOO]', $refs);
+
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('https://example.com', $nodes[0]->href);
+    }
+
+    public function testUnresolvedReferenceIsLiteral(): void
+    {
+        $nodes = $this->parser->parse('[foo][bar]', []);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[foo][bar]', $nodes[0]->text);
+    }
+
+    public function testXssReferenceRejected(): void
+    {
+        $refs = ['bar' => ['href' => 'javascript:alert(1)', 'title' => null]];
+        $nodes = $this->parser->parse('[foo][bar]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[foo][bar]', $nodes[0]->text);
+    }
+
+    public function testXssShortcutReferenceRejected(): void
+    {
+        $refs = ['foo' => ['href' => 'javascript:alert(1)', 'title' => null]];
+        $nodes = $this->parser->parse('[foo]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+    }
+
+    public function testInlineLinkTakesPrecedenceOverReference(): void
+    {
+        $refs = ['foo' => ['href' => 'https://ref.example.com', 'title' => null]];
+        $nodes = $this->parser->parse('[foo](https://inline.example.com)', $refs);
+
+        $this->assertInstanceOf(LinkNode::class, $nodes[0]);
+        $this->assertSame('https://inline.example.com', $nodes[0]->href);
+    }
+
+    public function testOrphanBracketsNotConsumedAsShortcut(): void
+    {
+        // [text] with no matching ref must NOT be consumed
+        $nodes = $this->parser->parse('[orphan]', []);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[orphan]', $nodes[0]->text);
+    }
 }

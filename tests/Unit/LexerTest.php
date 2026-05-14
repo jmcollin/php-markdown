@@ -245,4 +245,87 @@ final class LexerTest extends TestCase
         $this->assertTrue($tokens[0]->meta['checked']);
         $this->assertSame('first', $tokens[0]->content);
     }
+
+    // ── Link definitions ─────────────────────────────────────────────────────
+
+    #[DataProvider('linkDefinitionProvider')]
+    public function testLinkDefinitionDetected(
+        string $input,
+        TokenType $expectedType,
+        ?string $label,
+        ?string $href,
+        ?string $title,
+    ): void {
+        $tokens = $this->lexer->tokenize($input);
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame($expectedType, $tokens[0]->type);
+
+        if ($label !== null) {
+            $this->assertSame($label, $tokens[0]->meta['label']);
+        }
+        if ($href !== null) {
+            $this->assertSame($href, $tokens[0]->meta['href']);
+        }
+        if ($title !== null) {
+            $this->assertSame($title, $tokens[0]->meta['title']);
+        }
+    }
+
+    /** @return array<string, array{string, TokenType, ?string, ?string, ?string}> */
+    public static function linkDefinitionProvider(): array
+    {
+        return [
+            'basic definition' => [
+                '[foo]: https://example.com',
+                TokenType::LINK_DEFINITION,
+                'foo',
+                'https://example.com',
+                null,
+            ],
+            'definition with title' => [
+                '[foo]: https://example.com "My title"',
+                TokenType::LINK_DEFINITION,
+                'foo',
+                'https://example.com',
+                'My title',
+            ],
+            'label with spaces' => [
+                '[foo bar]: https://example.com',
+                TokenType::LINK_DEFINITION,
+                'foo bar',
+                'https://example.com',
+                null,
+            ],
+            'label mixed case preserved' => [
+                '[FOO]: https://example.com',
+                TokenType::LINK_DEFINITION,
+                'FOO',
+                'https://example.com',
+                null,
+            ],
+            'unsafe url still emits link definition' => [
+                '[foo]: javascript:alert(1)',
+                TokenType::LINK_DEFINITION,
+                'foo',
+                'javascript:alert(1)',
+                null,
+            ],
+        ];
+    }
+
+    public function testLinkDefinitionWithoutColonIsParagraph(): void
+    {
+        $tokens = $this->lexer->tokenize('[foo]');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
+    }
+
+    public function testLinkDefinitionTitleIsNullWhenAbsent(): void
+    {
+        $tokens = $this->lexer->tokenize('[foo]: https://example.com');
+
+        $this->assertNull($tokens[0]->meta['title']);
+    }
 }

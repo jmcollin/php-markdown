@@ -27,14 +27,20 @@ final class InlineParser
 
     // Patterns use \G + offset param instead of substr() to avoid O(n²) string copies.
     // URL capture class excludes < > to block <javascript:...> autolink-style bypass.
-    private const PATTERN_IMAGE = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
-    private const PATTERN_LINK  = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
+    private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
+    private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
+    private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+
+    /** @var array<string, array{href: string, title: ?string}> */
+    private array $refs = [];
 
     /**
+     * @param array<string, array{href: string, title: ?string}> $refs
      * @return InlineNodeInterface[]
      */
-    public function parse(string $text): array
+    public function parse(string $text, array $refs = []): array
     {
+        $this->refs = $refs;
         return $this->scan($text, 0);
     }
 
@@ -96,8 +102,9 @@ final class InlineParser
                 }
             }
 
-            // ── Link: [text](url "title"?) ────────────────────────────────────
+            // ── Link: [text](url "title"?) and reference links ───────────────
             if ($char === '[') {
+                // 1. Inline link — highest priority (CommonMark spec §6.3)
                 if (preg_match(self::PATTERN_LINK, $text, $m, 0, $pos)) {
                     $nodes = $this->flushBuffer($buffer, $nodes);
                     $buffer = '';
@@ -114,6 +121,56 @@ final class InlineParser
                     }
                     $pos += strlen($m[0]);
                     continue;
+                }
+
+                // 2. Reference link: [text][ref] or collapsed [text][]
+                if (preg_match(self::PATTERN_REF_LINK, $text, $m, 0, $pos)) {
+                    $nodes = $this->flushBuffer($buffer, $nodes);
+                    $buffer = '';
+                    $lookupKey = strtolower($m[2] !== '' ? $m[2] : $m[1]);
+                    if (isset($this->refs[$lookupKey])) {
+                        $def = $this->refs[$lookupKey];
+                        if ($this->isSafeUrl($def['href'])) {
+                            $nodes[] = new LinkNode(
+                                href: $def['href'],
+                                children: $this->scan($m[1], $depth + 1),
+                                title: $def['title'],
+                            );
+                        } else {
+                            $buffer .= $m[0]; // Unsafe href: render as literal text (XSS prevention)
+                        }
+                    } else {
+                        $buffer .= $m[0]; // Unresolved reference → literal text
+                    }
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+
+                // 3. Shortcut reference: [text] — only if key exists in refs
+                $closePos = strpos($text, ']', $pos + 1);
+                if ($closePos !== false) {
+                    $label = substr($text, $pos + 1, $closePos - $pos - 1);
+                    $nextChar = $text[$closePos + 1] ?? '';
+                    // Shortcut: next char must NOT be ( or [ (those were handled above)
+                    if ($nextChar !== '(' && $nextChar !== '[' && $label !== '') {
+                        $lookupKey = strtolower($label);
+                        if (isset($this->refs[$lookupKey])) {
+                            $def = $this->refs[$lookupKey];
+                            $nodes = $this->flushBuffer($buffer, $nodes);
+                            $buffer = '';
+                            if ($this->isSafeUrl($def['href'])) {
+                                $nodes[] = new LinkNode(
+                                    href: $def['href'],
+                                    children: $this->scan($label, $depth + 1),
+                                    title: $def['title'],
+                                );
+                            } else {
+                                $buffer .= substr($text, $pos, $closePos - $pos + 1); // Unsafe href → literal
+                            }
+                            $pos = $closePos + 1;
+                            continue;
+                        }
+                    }
                 }
             }
 
