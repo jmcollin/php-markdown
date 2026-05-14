@@ -387,6 +387,17 @@ final class InlineParserTest extends TestCase
 
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[foo]', $nodes[0]->text);
+    }
+
+    public function testXssCollapsedReferenceRejected(): void
+    {
+        $refs = ['foo' => ['href' => 'javascript:alert(1)', 'title' => null]];
+        $nodes = $this->parser->parse('[foo][]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[foo][]', $nodes[0]->text);
     }
 
     public function testInlineLinkTakesPrecedenceOverReference(): void

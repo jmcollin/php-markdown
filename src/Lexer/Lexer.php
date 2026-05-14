@@ -19,7 +19,7 @@ final class Lexer
     private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE   = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
-    private const PATTERN_LINK_DEFINITION   = '/^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
+    private const PATTERN_LINK_DEFINITION   = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
     private const PATTERN_TABLE_ROW       = '/^\|?.+\|.+\|?$/';
     private const PATTERN_TABLE_SEPARATOR = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
 
@@ -144,6 +144,7 @@ final class Lexer
             }
         }
 
+        // URL validation is intentionally deferred to InlineParser::isSafeUrl() at resolution time.
         if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
             $href = $m[2];
             if (strlen($href) > 2048) {
