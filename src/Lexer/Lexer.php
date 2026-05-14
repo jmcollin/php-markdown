@@ -145,13 +145,20 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
+            $href = $m[2];
+            if (strlen($href) > 2048) {
+                return new Token(TokenType::PARAGRAPH, $line);
+            }
+            $rawTitle = isset($m[3]) && $m[3] !== '' ? $m[3] : null;
+            // Strip control characters from title (U+0000–U+001F, U+007F)
+            $title = $rawTitle !== null ? preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle) : null;
             return new Token(
                 TokenType::LINK_DEFINITION,
                 $line,
                 [
                     'label' => $m[1],
-                    'href'  => $m[2],
-                    'title' => isset($m[3]) && $m[3] !== '' ? $m[3] : null,
+                    'href'  => $href,
+                    'title' => $title !== '' ? $title : null,
                 ],
             );
         }

@@ -41,7 +41,11 @@ final class InlineParser
     public function parse(string $text, array $refs = []): array
     {
         $this->refs = $refs;
-        return $this->scan($text, 0);
+        try {
+            return $this->scan($text, 0);
+        } finally {
+            $this->refs = [];
+        }
     }
 
     /**
@@ -127,7 +131,7 @@ final class InlineParser
                 if (preg_match(self::PATTERN_REF_LINK, $text, $m, 0, $pos)) {
                     $nodes = $this->flushBuffer($buffer, $nodes);
                     $buffer = '';
-                    $lookupKey = strtolower($m[2] !== '' ? $m[2] : $m[1]);
+                    $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
                     if (isset($this->refs[$lookupKey])) {
                         $def = $this->refs[$lookupKey];
                         if ($this->isSafeUrl($def['href'])) {
@@ -146,14 +150,13 @@ final class InlineParser
                     continue;
                 }
 
-                // 3. Shortcut reference: [text] — only if key exists in refs
-                $closePos = strpos($text, ']', $pos + 1);
-                if ($closePos !== false) {
+                // 3. Shortcut reference: [text] — guard against O(n²) strpos on ref-free documents
+                if ($this->refs !== [] && ($closePos = strpos($text, ']', $pos + 1)) !== false) {
                     $label = substr($text, $pos + 1, $closePos - $pos - 1);
                     $nextChar = $text[$closePos + 1] ?? '';
                     // Shortcut: next char must NOT be ( or [ (those were handled above)
                     if ($nextChar !== '(' && $nextChar !== '[' && $label !== '') {
-                        $lookupKey = strtolower($label);
+                        $lookupKey = mb_strtolower($label, 'UTF-8');
                         if (isset($this->refs[$lookupKey])) {
                             $def = $this->refs[$lookupKey];
                             $nodes = $this->flushBuffer($buffer, $nodes);
@@ -249,8 +252,8 @@ final class InlineParser
 
     private function isSafeUrl(string $url): bool
     {
-        // Reject control chars and space — bypass vectors for parse_url scheme detection.
-        if (preg_match('/[\x00-\x20\x7F]/', $url)) {
+        // Reject control chars (raw or percent-encoded: %00, %0a, %0d…).
+        if (preg_match('/[\x00-\x20\x7F]/', rawurldecode($url))) {
             return false;
         }
         // Reject protocol-relative URLs (//evil.com inherits the host page's scheme).

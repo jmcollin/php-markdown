@@ -407,4 +407,46 @@ final class InlineParserTest extends TestCase
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
         $this->assertSame('[orphan]', $nodes[0]->text);
     }
+
+    // ── Finding 2.1 — O(n²) guard ────────────────────────────────────────────
+
+    public function testManyOpenBracketsWithEmptyRefsNoShortcutScan(): void
+    {
+        // Pathological input: many [ with no ] — strpos must NOT be called per-char when refs is empty
+        $input = str_repeat('[', 500);
+        $nodes = $this->parser->parse($input, []);
+
+        // All chars fall through to buffer → single TextNode
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame($input, $nodes[0]->text);
+    }
+
+    // ── Finding 1.2 — percent-encoded control chars in URLs ──────────────────
+
+    public function testMailtoWithPercentEncodedNewlineRejected(): void
+    {
+        $nodes = $this->parser->parse('[contact](mailto:victim@x.com%0aBcc:evil@y.com)');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+    }
+
+    public function testMailtoWithPercentEncodedNullByteRejected(): void
+    {
+        $nodes = $this->parser->parse('[x](mailto:a@b.com%00evil)');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+    }
+
+    public function testMailtoWithPercentEncodedControlCharInRefRejected(): void
+    {
+        $refs = ['evil' => ['href' => 'mailto:a@b.com%0aBcc:attacker@y.com', 'title' => null]];
+        $nodes = $this->parser->parse('[contact][evil]', $refs);
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('[contact][evil]', $nodes[0]->text);
+    }
 }
