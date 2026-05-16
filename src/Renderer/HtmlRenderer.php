@@ -18,6 +18,7 @@ use PhpMarkdown\Node\Block\TableRowNode;
 
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
@@ -48,6 +49,7 @@ final class HtmlRenderer
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
             $node instanceof HorizontalRuleNode => '<hr>',
+            $node instanceof HardBreakNode    => '<br>',
             $node instanceof TextNode         => $this->esc($node->text),
             $node instanceof StrongNode       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
             $node instanceof StrikethroughNode => '<del>' . $this->renderChildren($node->children) . '</del>',

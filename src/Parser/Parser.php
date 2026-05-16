@@ -18,6 +18,8 @@ use PhpMarkdown\Node\Block\ParagraphNode;
 use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\TextNode;
 
 /**
  * Consumes a Token sequence and builds a block-level AST.
@@ -102,15 +104,14 @@ final class Parser
             }
 
             if ($token->type === TokenType::PARAGRAPH) {
-                // Merge consecutive paragraph tokens (soft-wrapped lines)
-                $lines = [];
+                // Collect consecutive paragraph tokens (may include hard breaks).
+                $paraTokens = [];
                 while ($i < $count && $tokens[$i]->type === TokenType::PARAGRAPH) {
-                    $lines[] = $tokens[$i]->content;
+                    $paraTokens[] = $tokens[$i];
                     $i++;
                 }
-                // CommonMark spec: paragraph continuation lines join with a single space.
                 $children[] = new ParagraphNode(
-                    children: $this->inlineParser->parse(implode(' ', $lines), $this->linkRefs),
+                    children: $this->buildParagraphChildren($paraTokens),
                 );
                 continue;
             }
@@ -119,6 +120,38 @@ final class Parser
         }
 
         return new DocumentNode($children);
+    }
+
+    /**
+     * Build inline children for a paragraph from its token sequence.
+     *
+     * Adjacent tokens are soft-joined with a space.
+     * Tokens with hard_break=true produce a HardBreakNode instead of a space
+     * after that token's inline content — EXCEPT the last token (CommonMark §6.7).
+     *
+     * @param  Token[]                                  $tokens
+     * @return \PhpMarkdown\Node\InlineNodeInterface[]
+     */
+    private function buildParagraphChildren(array $tokens): array
+    {
+        $result = [];
+        $lastIdx = count($tokens) - 1;
+
+        foreach ($tokens as $idx => $token) {
+            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs);
+            $result = [...$result, ...$inlineNodes];
+
+            // After this token's content (not after the last token): insert separator.
+            if ($idx < $lastIdx) {
+                if ($token->meta['hard_break'] ?? false) {
+                    $result[] = new HardBreakNode();
+                } else {
+                    $result[] = new TextNode(' ');
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**

@@ -360,4 +360,78 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse('- [X] Done');
         $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
     }
+
+    // ── Hard line breaks (CommonMark §6.7) ───────────────────────────────────
+
+    public function testTwoTrailingSpacesProducesBr(): void
+    {
+        // Two trailing spaces before \n must become <br> not a space.
+        $html = $this->parser->parse("foo  \nbar");
+        $this->assertSame('<p>foo<br>bar</p>', $html);
+    }
+
+    public function testBackslashLineBreakProducesBr(): void
+    {
+        // Trailing backslash before \n must become <br>.
+        $html = $this->parser->parse("foo\\\nbar");
+        $this->assertSame('<p>foo<br>bar</p>', $html);
+    }
+
+    public function testNoTrailingSpacesProducesSoftBreak(): void
+    {
+        // Without trailing spaces the lines are soft-joined with a space.
+        $html = $this->parser->parse("foo\nbar");
+        $this->assertSame('<p>foo bar</p>', $html);
+    }
+
+    public function testHardBreakInsideInlineContent(): void
+    {
+        // Hard break after inline strong element.
+        $html = $this->parser->parse("**bold**  \ntext");
+        $this->assertSame('<p><strong>bold</strong><br>text</p>', $html);
+    }
+
+    public function testMultipleHardBreaksInOneParagraph(): void
+    {
+        // Multiple hard breaks in sequence.
+        $html = $this->parser->parse("a  \nb  \nc");
+        $this->assertSame('<p>a<br>b<br>c</p>', $html);
+    }
+
+    public function testThreeTrailingSpacesStillOneBr(): void
+    {
+        // Three or more trailing spaces → still one <br>.
+        $html = $this->parser->parse("foo   \nbar");
+        $this->assertSame('<p>foo<br>bar</p>', $html);
+    }
+
+    public function testHardBreakOnLastLineOfParagraphStripped(): void
+    {
+        // Hard break on last line of a paragraph → no trailing <br> (CommonMark §6.7).
+        $html = $this->parser->parse("foo  ");
+        $this->assertSame('<p>foo</p>', $html);
+    }
+
+    public function testDoubleBackslashIsNotHardBreak(): void
+    {
+        // An escaped backslash (\\) at end of line must NOT produce <br>.
+        $html = $this->parser->parse("foo\\\\\nbar");
+        $this->assertStringNotContainsString('<br>', $html);
+    }
+
+    // ── Regression guards ────────────────────────────────────────────────────
+
+    public function testSoftBreakBetweenParagraphLinesUnchanged(): void
+    {
+        // Pre-existing soft-break behavior must not regress.
+        $html = $this->parser->parse("line one\nline two\nline three");
+        $this->assertSame('<p>line one line two line three</p>', $html);
+    }
+
+    public function testBlankLineSeparatesParagraphs(): void
+    {
+        // Blank line separation of paragraphs must not regress.
+        $html = $this->parser->parse("para one\n\npara two");
+        $this->assertSame('<p>para one</p><p>para two</p>', $html);
+    }
 }

@@ -164,6 +164,24 @@ final class Lexer
             );
         }
 
+        // Hard line break: two or more trailing spaces (CommonMark §6.7)
+        if (preg_match('/  +$/', $line)) {
+            return new Token(
+                TokenType::PARAGRAPH,
+                rtrim($line),
+                ['hard_break' => true],
+            );
+        }
+
+        // Hard line break: backslash at end of line (not double-backslash)
+        if (preg_match('/(?<!\\\\)\\\\$/', $line)) {
+            return new Token(
+                TokenType::PARAGRAPH,
+                substr($line, 0, -1),
+                ['hard_break' => true],
+            );
+        }
+
         return new Token(TokenType::PARAGRAPH, $line);
     }
 }
