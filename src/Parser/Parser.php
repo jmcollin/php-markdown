@@ -28,6 +28,9 @@ final class Parser
 {
     private readonly InlineParser $inlineParser;
 
+    /** @var array<string, array{href: string, title: ?string}> */
+    private array $linkRefs = [];
+
     public function __construct()
     {
         $this->inlineParser = new InlineParser();
@@ -39,6 +42,8 @@ final class Parser
      */
     public function parse(array $tokens): DocumentNode
     {
+        ['refs' => $this->linkRefs, 'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
+
         $children = [];
         $i = 0;
         $count = count($tokens);
@@ -54,7 +59,7 @@ final class Parser
             if ($token->type === TokenType::HEADING) {
                 $children[] = new HeadingNode(
                     level: $token->meta['level'],
-                    children: $this->inlineParser->parse($token->content),
+                    children: $this->inlineParser->parse($token->content, $this->linkRefs),
                 );
                 $i++;
                 continue;
@@ -105,7 +110,7 @@ final class Parser
                 }
                 // CommonMark spec: paragraph continuation lines join with a single space.
                 $children[] = new ParagraphNode(
-                    children: $this->inlineParser->parse(implode(' ', $lines)),
+                    children: $this->inlineParser->parse(implode(' ', $lines), $this->linkRefs),
                 );
                 continue;
             }
@@ -133,7 +138,7 @@ final class Parser
             && $tokens[$i]->meta['ordered'] === $ordered
         ) {
             $itemToken      = $tokens[$i];
-            $inlineChildren = $this->inlineParser->parse($itemToken->content);
+            $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs);
             $i++;
 
             // If the next token is a deeper-level list item, recurse.
@@ -175,7 +180,7 @@ final class Parser
         $rows[] = new TableRowNode(
             cells: array_map(
                 fn(string $cell, int $idx) => new TableCellNode(
-                    children: $this->inlineParser->parse($cell),
+                    children: $this->inlineParser->parse($cell, $this->linkRefs),
                     align: $aligns[$idx] ?? '',
                 ),
                 $headerCells,
@@ -190,7 +195,7 @@ final class Parser
             $rows[] = new TableRowNode(
                 cells: array_map(
                     fn(string $cell, int $idx) => new TableCellNode(
-                        children: $this->inlineParser->parse($cell),
+                        children: $this->inlineParser->parse($cell, $this->linkRefs),
                         align: $aligns[$idx] ?? '',
                     ),
                     $cells,
@@ -231,6 +236,34 @@ final class Parser
     }
 
     /**
+     * Scans tokens for LINK_DEFINITION entries, builds the reference map,
+     * and returns the filtered token list (LINK_DEFINITION tokens removed).
+     *
+     * @param  Token[]  $tokens
+     * @return array{refs: array<string, array{href: string, title: ?string}>, tokens: Token[]}
+     */
+    private function extractLinkDefinitions(array $tokens): array
+    {
+        $refs = [];
+        $filtered = [];
+        foreach ($tokens as $token) {
+            if ($token->type === TokenType::LINK_DEFINITION) {
+                $key = mb_strtolower($token->meta['label'], 'UTF-8');
+                // First definition wins (CommonMark spec §4.7)
+                if (!isset($refs[$key])) {
+                    $refs[$key] = [
+                        'href'  => $token->meta['href'],
+                        'title' => $token->meta['title'],
+                    ];
+                }
+            } else {
+                $filtered[] = $token;
+            }
+        }
+        return ['refs' => $refs, 'tokens' => $filtered];
+    }
+
+    /**
      * @param Token[] $tokens
      */
     private function buildBlockquote(array $tokens): BlockquoteNode
@@ -244,7 +277,7 @@ final class Parser
         }
         if ($lines !== []) {
             $paragraphs[] = new ParagraphNode(
-                children: $this->inlineParser->parse(implode(' ', $lines)),
+                children: $this->inlineParser->parse(implode(' ', $lines), $this->linkRefs),
             );
         }
         return new BlockquoteNode(children: $paragraphs);

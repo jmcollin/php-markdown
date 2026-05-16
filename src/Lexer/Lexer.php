@@ -18,7 +18,8 @@ final class Lexer
     private const PATTERN_BLOCKQUOTE     = '/^(>+)\s*(.*)/';
     private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
-    private const PATTERN_HORIZONTAL_RULE = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_HORIZONTAL_RULE   = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_LINK_DEFINITION   = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
     private const PATTERN_TABLE_ROW       = '/^\|?.+\|.+\|?$/';
     private const PATTERN_TABLE_SEPARATOR = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
 
@@ -141,6 +142,26 @@ final class Lexer
             if (preg_match(self::PATTERN_TABLE_ROW, $line)) {
                 return new Token(TokenType::TABLE_ROW, $line);
             }
+        }
+
+        // URL validation is intentionally deferred to InlineParser::isSafeUrl() at resolution time.
+        if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
+            $href = $m[2];
+            if (strlen($href) > 2048) {
+                return new Token(TokenType::PARAGRAPH, $line);
+            }
+            $rawTitle = isset($m[3]) && $m[3] !== '' ? $m[3] : null;
+            // Strip control characters from title (U+0000–U+001F, U+007F)
+            $title = $rawTitle !== null ? preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle) : null;
+            return new Token(
+                TokenType::LINK_DEFINITION,
+                $line,
+                [
+                    'label' => $m[1],
+                    'href'  => $href,
+                    'title' => $title !== '' ? $title : null,
+                ],
+            );
         }
 
         return new Token(TokenType::PARAGRAPH, $line);
