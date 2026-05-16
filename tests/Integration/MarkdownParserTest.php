@@ -419,6 +419,29 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringNotContainsString('<br>', $html);
     }
 
+    public function testHardBreakLineWithUnsafeUrlIsFiltered(): void
+    {
+        // isSafeUrl() must still fire on content that carries hard_break=true.
+        $html = $this->parser->parse("[click](javascript:alert(1))  \nafter");
+        $this->assertStringNotContainsString('href="javascript:', $html);
+        $this->assertStringContainsString('<br>', $html);
+    }
+
+    public function testFencedCodeInnerLineWithTrailingSpacesIsNotHardBreak(): void
+    {
+        // Trailing spaces inside a fenced code block must not produce <br>.
+        $html = $this->parser->parse("```\nfoo  \nbar\n```");
+        $this->assertStringNotContainsString('<br>', $html);
+    }
+
+    public function testBlockquoteLineWithTrailingSpacesNoHardBreak(): void
+    {
+        // Blockquote branch uses trim(), so trailing spaces are stripped before
+        // the hard-break check — hard breaks inside blockquotes are not supported.
+        $html = $this->parser->parse("> foo  \n> bar");
+        $this->assertStringNotContainsString('<br>', $html);
+    }
+
     // ── Regression guards ────────────────────────────────────────────────────
 
     public function testSoftBreakBetweenParagraphLinesUnchanged(): void

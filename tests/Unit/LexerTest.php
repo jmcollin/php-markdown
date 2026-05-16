@@ -375,4 +375,13 @@ final class LexerTest extends TestCase
 
         $this->assertFalse($tokens[0]->meta['hard_break'] ?? false);
     }
+
+    public function testTripleBackslashIsHardBreak(): void
+    {
+        // \\\: first two form escaped backslash, third is unescaped → hard break.
+        $tokens = $this->lexer->tokenize("foo\\\\\\\nbar");
+
+        $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
+        $this->assertSame('foo\\\\', $tokens[0]->content);
+    }
 }

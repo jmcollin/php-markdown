@@ -104,7 +104,6 @@ final class Parser
             }
 
             if ($token->type === TokenType::PARAGRAPH) {
-                // Collect consecutive paragraph tokens (may include hard breaks).
                 $paraTokens = [];
                 while ($i < $count && $tokens[$i]->type === TokenType::PARAGRAPH) {
                     $paraTokens[] = $tokens[$i];
@@ -122,16 +121,6 @@ final class Parser
         return new DocumentNode($children);
     }
 
-    /**
-     * Build inline children for a paragraph from its token sequence.
-     *
-     * Adjacent tokens are soft-joined with a space.
-     * Tokens with hard_break=true produce a HardBreakNode instead of a space
-     * after that token's inline content — EXCEPT the last token (CommonMark §6.7).
-     *
-     * @param  Token[]                                  $tokens
-     * @return \PhpMarkdown\Node\InlineNodeInterface[]
-     */
     private function buildParagraphChildren(array $tokens): array
     {
         $result = [];
@@ -139,15 +128,13 @@ final class Parser
 
         foreach ($tokens as $idx => $token) {
             $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs);
-            $result = [...$result, ...$inlineNodes];
+            array_push($result, ...$inlineNodes);
 
-            // After this token's content (not after the last token): insert separator.
             if ($idx < $lastIdx) {
-                if ($token->meta['hard_break'] ?? false) {
-                    $result[] = new HardBreakNode();
-                } else {
-                    $result[] = new TextNode(' ');
-                }
+                // Hard break on last token is stripped per CommonMark §6.7.
+                $result[] = ($token->meta['hard_break'] ?? false)
+                    ? new HardBreakNode()
+                    : new TextNode(' ');
             }
         }
 

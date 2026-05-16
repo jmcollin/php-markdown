@@ -164,8 +164,9 @@ final class Lexer
             );
         }
 
-        // Hard line break: two or more trailing spaces (CommonMark §6.7)
-        if (preg_match('/  +$/', $line)) {
+        // Two+ trailing ASCII spaces → hard break (CommonMark §6.7). Intentionally
+        // matches only 0x20 pairs; tab-space mixes are not treated as hard breaks.
+        if (substr_compare($line, '  ', -2) === 0) {
             return new Token(
                 TokenType::PARAGRAPH,
                 rtrim($line),
@@ -173,8 +174,8 @@ final class Lexer
             );
         }
 
-        // Hard line break: backslash at end of line (not double-backslash)
-        if (preg_match('/(?<!\\\\)\\\\$/', $line)) {
+        // Odd number of trailing backslashes = unescaped final backslash → hard break (CommonMark §6.7).
+        if (preg_match('/\\\\+$/', $line, $m) && strlen($m[0]) % 2 === 1) {
             return new Token(
                 TokenType::PARAGRAPH,
                 substr($line, 0, -1),
