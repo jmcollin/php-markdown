@@ -15,7 +15,7 @@ final class Lexer
     private const PATTERN_HEADING        = '/^(#{1,6})\s+(.+)$/';
     private const PATTERN_FENCED_OPEN    = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
     private const PATTERN_FENCED_CLOSE   = '/^`{3,}$/';
-    private const PATTERN_BLOCKQUOTE     = '/^(>+)\s*(.*)/';
+    private const PATTERN_BLOCKQUOTE     = '/^((?:>\s*)+)(.*)/';
     private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE   = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
@@ -113,7 +113,7 @@ final class Lexer
             return new Token(
                 TokenType::BLOCKQUOTE,
                 trim($m[2]),
-                ['level' => strlen($m[1])], // reserved for future nested-blockquote rendering
+                ['level' => substr_count($m[1], '>')],
             );
         }
 

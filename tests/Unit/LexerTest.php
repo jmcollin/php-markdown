@@ -108,6 +108,69 @@ final class LexerTest extends TestCase
         $this->assertSame(2, $tokens[0]->meta['level']);
     }
 
+    // ── Blockquote level detection ────────────────────────────────────────────
+
+    public function testBlockquoteLevelOne(): void
+    {
+        $tokens = $this->lexer->tokenize('> hello');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+        $this->assertSame('hello', $tokens[0]->content);
+    }
+
+    public function testBlockquoteLevelTwo(): void
+    {
+        $tokens = $this->lexer->tokenize('> > text');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+        $this->assertSame('text', $tokens[0]->content);
+    }
+
+    public function testBlockquoteLevelThree(): void
+    {
+        $tokens = $this->lexer->tokenize('> > > text');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(3, $tokens[0]->meta['level']);
+    }
+
+    public function testBlockquoteCompactDoubleMarker(): void
+    {
+        $tokens = $this->lexer->tokenize('>> text');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+    }
+
+    public function testBlockquoteNoSpaceAfterSoleMarker(): void
+    {
+        $tokens = $this->lexer->tokenize('>text');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+        $this->assertSame('text', $tokens[0]->content);
+    }
+
+    public function testBlockquoteNoSpaceAfterInnerMarker(): void
+    {
+        // "> >text" (no space after inner >) must still parse correctly
+        $tokens = $this->lexer->tokenize('> >text');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+        $this->assertSame('text', $tokens[0]->content);
+    }
+
+    public function testBlockquoteTrailingSpacesInContentAreTrimmed(): void
+    {
+        $tokens = $this->lexer->tokenize('>   lots of spaces   ');
+
+        $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
+        $this->assertSame('lots of spaces', $tokens[0]->content);
+    }
+
     public function testHorizontalRuleVariants(): void
     {
         foreach (['---', '***', '___'] as $hr) {

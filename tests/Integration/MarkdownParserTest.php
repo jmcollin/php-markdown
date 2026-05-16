@@ -307,6 +307,110 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringContainsString('overflow', $html);
     }
 
+    // ── Nested blockquotes ───────────────────────────────────────────────────
+
+    public function testNestedBlockquoteMixedLevels(): void
+    {
+        $md = "> outer\n> > inner\n> outer again";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>outer again</p></blockquote>',
+            $html,
+        );
+    }
+
+    public function testThreeLevelBlockquote(): void
+    {
+        $md = '> > > triple';
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><blockquote><blockquote><p>triple</p></blockquote></blockquote></blockquote>',
+            $html,
+        );
+    }
+
+    public function testLevelDecreaseThenIncrease(): void
+    {
+        $md = "> a\n> > b\n> c\n> > d";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>a</p><blockquote><p>b</p></blockquote><p>c</p><blockquote><p>d</p></blockquote></blockquote>',
+            $html,
+        );
+    }
+
+    public function testDepthGuardAt32(): void
+    {
+        $md = str_repeat('> ', 32) . 'text';
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(32, substr_count($html, '<blockquote>'));
+        $this->assertSame(32, substr_count($html, '</blockquote>'));
+    }
+
+    public function testDepthGuardAbove32ContentPreserved(): void
+    {
+        // Level 33 exceeds the guard: the else branch in buildBlockquote fires,
+        // treating the excess token as content inside the level-32 blockquote.
+        $md = str_repeat('> ', 33) . 'text';
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(32, substr_count($html, '<blockquote>'));
+        $this->assertSame(32, substr_count($html, '</blockquote>'));
+        $this->assertStringContainsString('text', $html);
+    }
+
+    public function testMultiLineSameLevelJoinedWithSpace(): void
+    {
+        // Two consecutive level-1 tokens accumulate into one ParagraphNode joined by space.
+        $md = "> line one\n> line two";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame('<blockquote><p>line one line two</p></blockquote>', $html);
+    }
+
+    public function testLevelSkipOneToThree(): void
+    {
+        // Level jump 1→3 with no level-2 token: should produce 3 nested blockquotes.
+        $md = "> a\n>>> c";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>a</p><blockquote><blockquote><p>c</p></blockquote></blockquote></blockquote>',
+            $html,
+        );
+    }
+
+    public function testBlockquoteAdjacentToParagraph(): void
+    {
+        // Blockquote followed by a normal paragraph in same document.
+        $md = "> quoted\n\nplain paragraph";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>quoted</p></blockquote><p>plain paragraph</p>',
+            $html,
+        );
+    }
+
+    public function testBlankLineBetweenBlockquoteLevelsSeparatesNodes(): void
+    {
+        // Blank line between two blockquotes produces two sibling blockquote nodes,
+        // not a nested one. This is the chosen behaviour (non-CommonMark): blank lines
+        // inside a blockquote are ignored by the lexer and do NOT close the outer quote.
+        $md = "> first\n\n> second";
+        $html = $this->parser->parse($md);
+
+        // Two separate top-level blockquotes (blank line resets context).
+        $this->assertSame(
+            '<blockquote><p>first</p></blockquote><blockquote><p>second</p></blockquote>',
+            $html,
+        );
+    }
+
     // ── Task lists ────────────────────────────────────────────────────────────
 
     public function testCheckedTaskItemRendersCheckbox(): void
