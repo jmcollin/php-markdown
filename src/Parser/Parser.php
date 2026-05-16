@@ -305,7 +305,6 @@ final class Parser
                     $children[] = new ParagraphNode(
                         children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
                     );
-                    $buffer = [];
                 }
                 return new BlockquoteNode(children: $children);
             }
