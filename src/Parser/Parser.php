@@ -84,13 +84,7 @@ final class Parser
             }
 
             if ($token->type === TokenType::BLOCKQUOTE) {
-                // Collect consecutive blockquote tokens into one node
-                $bqTokens = [];
-                while ($i < $count && $tokens[$i]->type === TokenType::BLOCKQUOTE) {
-                    $bqTokens[] = $tokens[$i];
-                    $i++;
-                }
-                $children[] = $this->buildBlockquote($bqTokens);
+                $children[] = $this->buildBlockquote($tokens, $i);
                 continue;
             }
 
@@ -289,22 +283,82 @@ final class Parser
     }
 
     /**
+     * Recursively builds a nested BlockquoteNode from a flat stream of BLOCKQUOTE tokens.
+     *
+     * $i is passed by reference so that a level-decrease early-return communicates the
+     * cursor position back to the caller, mirroring the buildList() contract.
+     *
      * @param Token[] $tokens
      */
-    private function buildBlockquote(array $tokens): BlockquoteNode
+    private function buildBlockquote(array $tokens, int &$i, int $minLevel = 1): BlockquoteNode
     {
-        $paragraphs = [];
-        $lines = [];
-        foreach ($tokens as $token) {
-            if ($token->content !== '') {
-                $lines[] = $token->content;
+        $count    = count($tokens);
+        $children = [];
+        $buffer   = [];
+
+        while ($i < $count && $tokens[$i]->type === TokenType::BLOCKQUOTE) {
+            $level = $tokens[$i]->meta['level'];
+
+            if ($level < $minLevel) {
+                // Level decrease: flush buffer and yield cursor to caller.
+                if ($buffer !== []) {
+                    $children[] = new ParagraphNode(
+                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                    );
+                    $buffer = [];
+                }
+                return new BlockquoteNode(children: $children);
+            }
+
+            if ($level === $minLevel) {
+                if ($tokens[$i]->content !== '') {
+                    $buffer[] = $tokens[$i]->content;
+                }
+                $i++;
+
+                // Flush buffer when the next token changes level or ends the blockquote run.
+                $nextIsCurrentLevel = $i < $count
+                    && $tokens[$i]->type === TokenType::BLOCKQUOTE
+                    && $tokens[$i]->meta['level'] === $minLevel;
+
+                if (!$nextIsCurrentLevel && $buffer !== []) {
+                    $children[] = new ParagraphNode(
+                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                    );
+                    $buffer = [];
+                }
+                continue;
+            }
+
+            // $level > $minLevel: flush buffer then recurse.
+            if ($buffer !== []) {
+                $children[] = new ParagraphNode(
+                    children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                );
+                $buffer = [];
+            }
+
+            if ($minLevel < 32) {
+                $children[] = $this->buildBlockquote($tokens, $i, $minLevel + 1);
+            } else {
+                // Depth guard (max 32 levels, matching buildList). Tokens beyond this depth
+                // are intentionally rendered as content inside the level-32 blockquote rather
+                // than triggering unbounded recursion. The extra ">" markers are consumed and
+                // discarded; only the text content is preserved.
+                if ($tokens[$i]->content !== '') {
+                    $buffer[] = $tokens[$i]->content;
+                }
+                $i++;
             }
         }
-        if ($lines !== []) {
-            $paragraphs[] = new ParagraphNode(
-                children: $this->inlineParser->parse(implode(' ', $lines), $this->linkRefs),
+
+        // Flush any remaining buffer at end of token stream.
+        if ($buffer !== []) {
+            $children[] = new ParagraphNode(
+                children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
             );
         }
-        return new BlockquoteNode(children: $paragraphs);
+
+        return new BlockquoteNode(children: $children);
     }
 }

@@ -307,6 +307,50 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringContainsString('overflow', $html);
     }
 
+    // ── Nested blockquotes ───────────────────────────────────────────────────
+
+    public function testNestedBlockquoteMixedLevels(): void
+    {
+        $md = "> outer\n> > inner\n> outer again";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>outer again</p></blockquote>',
+            $html,
+        );
+    }
+
+    public function testThreeLevelBlockquote(): void
+    {
+        $md = '> > > triple';
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><blockquote><blockquote><p>triple</p></blockquote></blockquote></blockquote>',
+            $html,
+        );
+    }
+
+    public function testLevelDecreaseThenIncrease(): void
+    {
+        $md = "> a\n> > b\n> c\n> > d";
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(
+            '<blockquote><p>a</p><blockquote><p>b</p></blockquote><p>c</p><blockquote><p>d</p></blockquote></blockquote>',
+            $html,
+        );
+    }
+
+    public function testDepthGuardAt32(): void
+    {
+        $md = str_repeat('> ', 32) . 'text';
+        $html = $this->parser->parse($md);
+
+        $this->assertSame(32, substr_count($html, '<blockquote>'));
+        $this->assertSame(32, substr_count($html, '</blockquote>'));
+    }
+
     // ── Task lists ────────────────────────────────────────────────────────────
 
     public function testCheckedTaskItemRendersCheckbox(): void

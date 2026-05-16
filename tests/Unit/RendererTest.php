@@ -153,6 +153,18 @@ final class RendererTest extends TestCase
         $this->assertSame('<blockquote><p>quote</p></blockquote>', $out);
     }
 
+    public function testNestedBlockquoteRendered(): void
+    {
+        $out = $this->render([
+            new BlockquoteNode([
+                new BlockquoteNode([
+                    new ParagraphNode([new TextNode('deep')]),
+                ]),
+            ]),
+        ]);
+        $this->assertSame('<blockquote><blockquote><p>deep</p></blockquote></blockquote>', $out);
+    }
+
     public function testHorizontalRuleRendered(): void
     {
         $out = $this->render([new HorizontalRuleNode()]);
