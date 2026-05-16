@@ -17,6 +17,7 @@ use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
@@ -366,5 +367,27 @@ final class RendererTest extends TestCase
             new ListItemNode([], checked: true),
         ])]);
         $this->assertSame('<ul><li><input type="checkbox" disabled checked> </li></ul>', $out);
+    }
+
+    // ── HardBreakNode rendering ──────────────────────────────────────────────
+
+    public function testHardBreakNodeRendersAsBr(): void
+    {
+        // A standalone HardBreakNode in a paragraph must render as <br>.
+        $out = $this->render([new ParagraphNode([
+            new TextNode('foo'),
+            new HardBreakNode(),
+            new TextNode('bar'),
+        ])]);
+        $this->assertSame('<p>foo<br>bar</p>', $out);
+    }
+
+    public function testHardBreakNodeAloneRendersAsBr(): void
+    {
+        // HardBreakNode renders <br> with no surrounding content noise.
+        $out = $this->render([new ParagraphNode([
+            new HardBreakNode(),
+        ])]);
+        $this->assertSame('<p><br></p>', $out);
     }
 }

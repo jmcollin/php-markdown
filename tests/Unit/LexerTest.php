@@ -328,4 +328,60 @@ final class LexerTest extends TestCase
 
         $this->assertNull($tokens[0]->meta['title']);
     }
+
+    // ── Hard line breaks ─────────────────────────────────────────────────────
+
+    public function testTwoTrailingSpacesSetsHardBreakMeta(): void
+    {
+        // Two trailing spaces trigger hard_break=true and the spaces are stripped from content.
+        $tokens = $this->lexer->tokenize("foo  \nbar");
+
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
+        $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
+        $this->assertSame('foo', $tokens[0]->content);
+    }
+
+    public function testBackslashLineBreakSetsHardBreakMeta(): void
+    {
+        // Trailing backslash triggers hard_break=true and the backslash is stripped.
+        $tokens = $this->lexer->tokenize("foo\\\nbar");
+
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
+        $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
+        $this->assertSame('foo', $tokens[0]->content);
+    }
+
+    public function testThreeTrailingSpacesStillOneHardBreak(): void
+    {
+        // Three or more trailing spaces → still hard_break, content stripped.
+        $tokens = $this->lexer->tokenize("foo   \nbar");
+
+        $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
+        $this->assertSame('foo', $tokens[0]->content);
+    }
+
+    public function testPlainLineHasNoHardBreakMeta(): void
+    {
+        // A line with no trailing spaces has no hard_break meta.
+        $tokens = $this->lexer->tokenize("foo\nbar");
+
+        $this->assertFalse($tokens[0]->meta['hard_break'] ?? false);
+    }
+
+    public function testDoubleBackslashIsNotHardBreak(): void
+    {
+        // An escaped backslash (\\) at end of line must NOT be a hard break.
+        $tokens = $this->lexer->tokenize("foo\\\\\nbar");
+
+        $this->assertFalse($tokens[0]->meta['hard_break'] ?? false);
+    }
+
+    public function testTripleBackslashIsHardBreak(): void
+    {
+        // \\\: first two form escaped backslash, third is unescaped → hard break.
+        $tokens = $this->lexer->tokenize("foo\\\\\\\nbar");
+
+        $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
+        $this->assertSame('foo\\\\', $tokens[0]->content);
+    }
 }
