@@ -122,26 +122,6 @@ final class Parser
         return new DocumentNode($children);
     }
 
-    private function buildParagraphChildren(array $tokens): array
-    {
-        $result = [];
-        $lastIdx = count($tokens) - 1;
-
-        foreach ($tokens as $idx => $token) {
-            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs);
-            array_push($result, ...$inlineNodes);
-
-            if ($idx < $lastIdx) {
-                // Hard break on last token is stripped per CommonMark §6.7.
-                $result[] = ($token->meta['hard_break'] ?? false)
-                    ? new HardBreakNode()
-                    : new TextNode(' ');
-            }
-        }
-
-        return $result;
-    }
-
     /**
      * @param Token[] $tokens
      * @return InlineNodeInterface[]
