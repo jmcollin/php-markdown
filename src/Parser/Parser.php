@@ -18,6 +18,9 @@ use PhpMarkdown\Node\Block\ParagraphNode;
 use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\TextNode;
+use PhpMarkdown\Node\InlineNodeInterface;
 
 /**
  * Consumes a Token sequence and builds a block-level AST.
@@ -102,15 +105,13 @@ final class Parser
             }
 
             if ($token->type === TokenType::PARAGRAPH) {
-                // Merge consecutive paragraph tokens (soft-wrapped lines)
-                $lines = [];
+                $paraTokens = [];
                 while ($i < $count && $tokens[$i]->type === TokenType::PARAGRAPH) {
-                    $lines[] = $tokens[$i]->content;
+                    $paraTokens[] = $tokens[$i];
                     $i++;
                 }
-                // CommonMark spec: paragraph continuation lines join with a single space.
                 $children[] = new ParagraphNode(
-                    children: $this->inlineParser->parse(implode(' ', $lines), $this->linkRefs),
+                    children: $this->buildParagraphChildren($paraTokens),
                 );
                 continue;
             }
@@ -119,6 +120,30 @@ final class Parser
         }
 
         return new DocumentNode($children);
+    }
+
+    /**
+     * @param Token[] $tokens
+     * @return InlineNodeInterface[]
+     */
+    private function buildParagraphChildren(array $tokens): array
+    {
+        $result = [];
+        $lastIdx = count($tokens) - 1;
+
+        foreach ($tokens as $idx => $token) {
+            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs);
+            array_push($result, ...$inlineNodes);
+
+            if ($idx < $lastIdx) {
+                // Hard break on last token is stripped per CommonMark §6.7.
+                $result[] = ($token->meta['hard_break'] ?? false)
+                    ? new HardBreakNode()
+                    : new TextNode(' ');
+            }
+        }
+
+        return $result;
     }
 
     /**
