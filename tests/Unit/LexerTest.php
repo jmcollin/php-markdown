@@ -448,6 +448,40 @@ final class LexerTest extends TestCase
         $this->assertSame('foo\\\\', $tokens[0]->content);
     }
 
+    // ── Table rows ───────────────────────────────────────────────────────────
+
+    public function testTwoColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testThreeColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b | c |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testFourColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b | c | d |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testTableRowWithoutLeadingPipe(): void
+    {
+        $tokens = $this->lexer->tokenize('a | b | c');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
     // ── Setext headings ──────────────────────────────────────────────────────
 
     public function testSetextH1WithEqualSigns(): void
@@ -541,5 +575,29 @@ final class LexerTest extends TestCase
 
         $paragraphs = array_filter($tokens, fn($t) => $t->type === TokenType::PARAGRAPH);
         $this->assertCount(0, $paragraphs);
+    }
+
+    public function testSetextH2SingleHyphenWithTrailingSpaceIsValidUnderline(): void
+    {
+        // CommonMark: setext H2 underline = 1+ hyphens + optional trailing spaces.
+        // "- " (hyphen + space) satisfies this and must promote preceding text to H2.
+        $tokens = $this->lexer->tokenize("text\n- ");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+    }
+
+    public function testListItemAfterTextIsNotSetext(): void
+    {
+        // "- item" has non-space content after hyphen → does not match setext underline.
+        // Must emit paragraph then list item, not a heading.
+        $tokens = $this->lexer->tokenize("text\n- item");
+
+        $headings = array_filter($tokens, fn($t) => $t->type === TokenType::HEADING);
+        $this->assertCount(0, $headings);
+
+        $list = array_filter($tokens, fn($t) => $t->type === TokenType::LIST_ITEM);
+        $this->assertCount(1, $list);
     }
 }

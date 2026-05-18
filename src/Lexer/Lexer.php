@@ -20,7 +20,7 @@ final class Lexer
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
-    private const PATTERN_TABLE_ROW        = '/^\|?[^|]+\|[^|]+\|?$/';
+    private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
     private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
     private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
     private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
