@@ -131,7 +131,7 @@ final class Parser
 
             if ($idx < $lastIdx) {
                 // Hard break on last token is stripped per CommonMark §6.7.
-                $result[] = ($token->meta['hard_break'] ?? false)
+                $result[] = ($token->meta['hard_break'] ?? false) === true
                     ? new HardBreakNode()
                     : new TextNode(' ');
             }
