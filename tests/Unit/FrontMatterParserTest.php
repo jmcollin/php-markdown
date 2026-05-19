@@ -185,6 +185,24 @@ final class FrontMatterParserTest extends TestCase
         $this->assertSame('[see ref]', $result['meta']['title']);
     }
 
+    public function testInlineSequenceWhitespaceAroundItems(): void
+    {
+        $result = $this->parser->extract("---\ntags: [ a , b , c ]\n---\n");
+        $this->assertSame(['a', 'b', 'c'], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceFloats(): void
+    {
+        $result = $this->parser->extract("---\nratios: [1.5, 2.0, 0.75]\n---\n");
+        $this->assertSame([1.5, 2.0, 0.75], $result['meta']['ratios']);
+    }
+
+    public function testInlineSequenceDoubleQuotedItems(): void
+    {
+        $result = $this->parser->extract("---\nkeys: [\"hello\", world]\n---\n");
+        $this->assertSame(['hello', 'world'], $result['meta']['keys']);
+    }
+
     public function testInputSizeCapThrows(): void
     {
         $mp = new \PhpMarkdown\MarkdownParser(maxBytes: 10);
