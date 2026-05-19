@@ -15,8 +15,10 @@ namespace PhpMarkdown\Parser;
  * Supported value types: string, int, float, bool (true/false), null.
  * Note: `yes`/`no` are treated as strings (not bool) to avoid country-code collisions.
  * Note: floats lose trailing zeros (e.g. `1.10` → `1.1`) — this is PHP float behaviour.
- * Sequences and mappings are not supported — values are always treated as strings
- * unless they parse as a scalar primitive.
+ * Inline sequences ([a, b, c]) are supported and return arrays of cast values.
+ * Limitation: quoted items containing commas (e.g. ["a, b", c]) are not supported —
+ * the comma inside quotes will split incorrectly.
+ * Block sequences (- item) and mappings are not supported.
  */
 final class FrontMatterParser
 {
@@ -121,6 +123,18 @@ final class FrontMatterParser
             )
         ) {
             return substr($value, 1, -1);
+        }
+
+        // Inline sequence: [val1, val2, val3]
+        if (str_starts_with($value, '[') && str_ends_with($value, ']')) {
+            $inner = trim(substr($value, 1, -1));
+            if ($inner === '') {
+                return [];
+            }
+            return array_map(
+                fn(string $item): mixed => $this->castValue(trim($item)),
+                explode(',', $inner)
+            );
         }
 
         if ($value === '' || strtolower($value) === 'null' || $value === '~') {

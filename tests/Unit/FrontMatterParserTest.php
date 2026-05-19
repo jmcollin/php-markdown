@@ -155,6 +155,36 @@ final class FrontMatterParserTest extends TestCase
         $this->assertSame('', $result['meta']['b']);
     }
 
+    public function testInlineSequenceStrings(): void
+    {
+        $result = $this->parser->extract("---\ntags: [javascript, performance, react]\n---\n");
+        $this->assertSame(['javascript', 'performance', 'react'], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceEmpty(): void
+    {
+        $result = $this->parser->extract("---\ntags: []\n---\n");
+        $this->assertSame([], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceMixedTypes(): void
+    {
+        $result = $this->parser->extract("---\nvalues: [42, true, null]\n---\n");
+        $this->assertSame([42, true, null], $result['meta']['values']);
+    }
+
+    public function testInlineSequenceSingleElement(): void
+    {
+        $result = $this->parser->extract("---\ntags: [foo]\n---\n");
+        $this->assertSame(['foo'], $result['meta']['tags']);
+    }
+
+    public function testQuotedStringWithBracketsNotParsedAsSequence(): void
+    {
+        $result = $this->parser->extract("---\ntitle: \"[see ref]\"\n---\n");
+        $this->assertSame('[see ref]', $result['meta']['title']);
+    }
+
     public function testInputSizeCapThrows(): void
     {
         $mp = new \PhpMarkdown\MarkdownParser(maxBytes: 10);
