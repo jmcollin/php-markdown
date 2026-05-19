@@ -155,6 +155,54 @@ final class FrontMatterParserTest extends TestCase
         $this->assertSame('', $result['meta']['b']);
     }
 
+    public function testInlineSequenceStrings(): void
+    {
+        $result = $this->parser->extract("---\ntags: [javascript, performance, react]\n---\n");
+        $this->assertSame(['javascript', 'performance', 'react'], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceEmpty(): void
+    {
+        $result = $this->parser->extract("---\ntags: []\n---\n");
+        $this->assertSame([], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceMixedTypes(): void
+    {
+        $result = $this->parser->extract("---\nvalues: [42, true, null]\n---\n");
+        $this->assertSame([42, true, null], $result['meta']['values']);
+    }
+
+    public function testInlineSequenceSingleElement(): void
+    {
+        $result = $this->parser->extract("---\ntags: [foo]\n---\n");
+        $this->assertSame(['foo'], $result['meta']['tags']);
+    }
+
+    public function testQuotedStringWithBracketsNotParsedAsSequence(): void
+    {
+        $result = $this->parser->extract("---\ntitle: \"[see ref]\"\n---\n");
+        $this->assertSame('[see ref]', $result['meta']['title']);
+    }
+
+    public function testInlineSequenceWhitespaceAroundItems(): void
+    {
+        $result = $this->parser->extract("---\ntags: [ a , b , c ]\n---\n");
+        $this->assertSame(['a', 'b', 'c'], $result['meta']['tags']);
+    }
+
+    public function testInlineSequenceFloats(): void
+    {
+        $result = $this->parser->extract("---\nratios: [1.5, 2.0, 0.75]\n---\n");
+        $this->assertSame([1.5, 2.0, 0.75], $result['meta']['ratios']);
+    }
+
+    public function testInlineSequenceDoubleQuotedItems(): void
+    {
+        $result = $this->parser->extract("---\nkeys: [\"hello\", world]\n---\n");
+        $this->assertSame(['hello', 'world'], $result['meta']['keys']);
+    }
+
     public function testInputSizeCapThrows(): void
     {
         $mp = new \PhpMarkdown\MarkdownParser(maxBytes: 10);
