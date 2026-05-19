@@ -447,4 +447,157 @@ final class LexerTest extends TestCase
         $this->assertTrue($tokens[0]->meta['hard_break'] ?? false);
         $this->assertSame('foo\\\\', $tokens[0]->content);
     }
+
+    // ── Table rows ───────────────────────────────────────────────────────────
+
+    public function testTwoColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testThreeColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b | c |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testFourColumnTableRow(): void
+    {
+        $tokens = $this->lexer->tokenize('| a | b | c | d |');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    public function testTableRowWithoutLeadingPipe(): void
+    {
+        $tokens = $this->lexer->tokenize('a | b | c');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+    }
+
+    // ── Setext headings ──────────────────────────────────────────────────────
+
+    public function testSetextH1WithEqualSigns(): void
+    {
+        $tokens = $this->lexer->tokenize("My Title\n========");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+        $this->assertSame('My Title', $tokens[0]->content);
+    }
+
+    public function testSetextH2WithHyphens(): void
+    {
+        $tokens = $this->lexer->tokenize("Sub Title\n---------");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+        $this->assertSame('Sub Title', $tokens[0]->content);
+    }
+
+    public function testSetextH1MinimumUnderlineOneChar(): void
+    {
+        $tokens = $this->lexer->tokenize("Title\n=");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+    }
+
+    public function testSetextH1TrailingSpacesOnUnderlineAllowed(): void
+    {
+        $tokens = $this->lexer->tokenize("Title\n===   ");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+    }
+
+    public function testSetextEmptyTextLineIsNotHeading(): void
+    {
+        $tokens = $this->lexer->tokenize("\n===");
+
+        $found = array_filter($tokens, fn($t) => $t->type === TokenType::HEADING);
+        $this->assertCount(0, $found);
+    }
+
+    public function testSetextH2TakesPrecedenceOverHrWhenPrecededByText(): void
+    {
+        $tokens = $this->lexer->tokenize("text\n---");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+        $this->assertSame('text', $tokens[0]->content);
+    }
+
+    public function testHrWithoutPrecedingTextRemainsHr(): void
+    {
+        $tokens = $this->lexer->tokenize("---");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HORIZONTAL_RULE, $tokens[0]->type);
+    }
+
+    public function testFencedBlockFollowedByHyphenLineIsHr(): void
+    {
+        // fenced block is not a text line, so --- after it is a plain HR
+        $tokens = $this->lexer->tokenize("```\ncode\n```\n---");
+
+        $hrTokens = array_filter($tokens, fn($t) => $t->type === TokenType::HORIZONTAL_RULE);
+        $this->assertCount(1, $hrTokens);
+    }
+
+    public function testAtxHeadingUnchangedBySetextLogic(): void
+    {
+        $tokens = $this->lexer->tokenize('# H1');
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(1, $tokens[0]->meta['level']);
+        $this->assertSame('H1', $tokens[0]->content);
+    }
+
+    public function testSetextHeadingContentIsNotParagraph(): void
+    {
+        // The paragraph token that would have been emitted for the text line
+        // must be replaced by the heading token — no paragraph emitted.
+        $tokens = $this->lexer->tokenize("Hello\n=====");
+
+        $paragraphs = array_filter($tokens, fn($t) => $t->type === TokenType::PARAGRAPH);
+        $this->assertCount(0, $paragraphs);
+    }
+
+    public function testSetextH2SingleHyphenWithTrailingSpaceIsValidUnderline(): void
+    {
+        // CommonMark: setext H2 underline = 1+ hyphens + optional trailing spaces.
+        // "- " (hyphen + space) satisfies this and must promote preceding text to H2.
+        $tokens = $this->lexer->tokenize("text\n- ");
+
+        $this->assertCount(1, $tokens);
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+    }
+
+    public function testListItemAfterTextIsNotSetext(): void
+    {
+        // "- item" has non-space content after hyphen → does not match setext underline.
+        // Must emit paragraph then list item, not a heading.
+        $tokens = $this->lexer->tokenize("text\n- item");
+
+        $headings = array_filter($tokens, fn($t) => $t->type === TokenType::HEADING);
+        $this->assertCount(0, $headings);
+
+        $list = array_filter($tokens, fn($t) => $t->type === TokenType::LIST_ITEM);
+        $this->assertCount(1, $list);
+    }
 }

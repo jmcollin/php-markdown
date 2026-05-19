@@ -12,16 +12,18 @@ namespace PhpMarkdown\Lexer;
  */
 final class Lexer
 {
-    private const PATTERN_HEADING        = '/^(#{1,6})\s+(.+)$/';
-    private const PATTERN_FENCED_OPEN    = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
-    private const PATTERN_FENCED_CLOSE   = '/^`{3,}$/';
-    private const PATTERN_BLOCKQUOTE     = '/^((?:>\s*)+)(.*)/';
-    private const PATTERN_UNORDERED_LIST = '/^( *)[-*+]\s+(.+)/';
-    private const PATTERN_ORDERED_LIST   = '/^( *)\d+\.\s+(.+)/';
-    private const PATTERN_HORIZONTAL_RULE   = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
-    private const PATTERN_LINK_DEFINITION   = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
-    private const PATTERN_TABLE_ROW       = '/^\|?.+\|.+\|?$/';
-    private const PATTERN_TABLE_SEPARATOR = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
+    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.+)$/';
+    private const PATTERN_FENCED_OPEN      = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
+    private const PATTERN_FENCED_CLOSE     = '/^`{3,}$/';
+    private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
+    private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
+    private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
+    private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
+    private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
+    private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
+    private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
+    private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
 
     /**
      * @return Token[]
@@ -40,12 +42,17 @@ final class Lexer
         $inFencedBlock = false;
         $fencedLanguage = '';
         $fencedLines = [];
+        $pendingToken = null;
 
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
 
             if ($inFencedBlock) {
                 if (preg_match(self::PATTERN_FENCED_CLOSE, $line)) {
+                    if ($pendingToken !== null) {
+                        $tokens[] = $pendingToken;
+                        $pendingToken = null;
+                    }
                     $tokens[] = new Token(
                         TokenType::FENCED_CODE,
                         implode("\n", $fencedLines),
@@ -61,13 +68,46 @@ final class Lexer
             }
 
             if (preg_match(self::PATTERN_FENCED_OPEN, $line, $m)) {
+                if ($pendingToken !== null) {
+                    $tokens[] = $pendingToken;
+                    $pendingToken = null;
+                }
                 $inFencedBlock = true;
                 $fencedLanguage = $m[2];
                 $fencedLines = [];
                 continue;
             }
 
-            $tokens[] = $this->matchLine($line);
+            // Setext heading detection: a pending text line followed by === or ---
+            if ($pendingToken !== null) {
+                if (preg_match(self::PATTERN_SETEXT_H1, $line)) {
+                    $tokens[] = new Token(TokenType::HEADING, $pendingToken->content, ['level' => 1]);
+                    $pendingToken = null;
+                    continue;
+                }
+                if (preg_match(self::PATTERN_SETEXT_H2, $line)) {
+                    $tokens[] = new Token(TokenType::HEADING, $pendingToken->content, ['level' => 2]);
+                    $pendingToken = null;
+                    continue;
+                }
+                $tokens[] = $pendingToken;
+                $pendingToken = null;
+            }
+
+            $token = $this->matchLine($line);
+
+            // A plain paragraph line is held as pending to allow setext promotion on the next line.
+            if ($token->type === TokenType::PARAGRAPH && ($line !== '' && !ctype_space($line))) {
+                $pendingToken = $token;
+                continue;
+            }
+
+            $tokens[] = $token;
+        }
+
+        // Flush any remaining pending token
+        if ($pendingToken !== null) {
+            $tokens[] = $pendingToken;
         }
 
         // Unclosed fenced block — emit what was collected
