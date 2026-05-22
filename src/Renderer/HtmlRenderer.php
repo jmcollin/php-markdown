@@ -21,6 +21,7 @@ use PhpMarkdown\Node\Block\TableRowNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
@@ -54,6 +55,8 @@ final class HtmlRenderer
             // Raw HTML blocks are emitted verbatim — no escaping (CommonMark §4.6).
             $node instanceof RawHtmlBlockNode => $node->content,
             $node instanceof HardBreakNode    => '<br>',
+            // HTML entities pass through verbatim — validated by InlineParser, no esc() needed.
+            $node instanceof HtmlEntityNode   => $node->entity,
             $node instanceof TextNode         => $this->esc($node->text),
             $node instanceof StrongNode       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
             $node instanceof StrikethroughNode => '<del>' . $this->renderChildren($node->children) . '</del>',

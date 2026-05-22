@@ -561,4 +561,79 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse("para one\n\npara two");
         $this->assertSame('<p>para one</p><p>para two</p>', $html);
     }
+
+    // ── HTML entity pass-through ──────────────────────────────────────────────
+
+    public function testNamedEntityPassesThrough(): void
+    {
+        $html = $this->parser->parse('foo &amp; bar');
+        $this->assertSame('<p>foo &amp; bar</p>', $html);
+    }
+
+    public function testDecimalEntityPassesThrough(): void
+    {
+        $html = $this->parser->parse('non&#160;breaking');
+        $this->assertSame('<p>non&#160;breaking</p>', $html);
+    }
+
+    public function testHexEntityPassesThrough(): void
+    {
+        $html = $this->parser->parse('&#x00A0;');
+        $this->assertSame('<p>&#x00A0;</p>', $html);
+    }
+
+    public function testBareAmpersandIsEscaped(): void
+    {
+        $html = $this->parser->parse('foo & bar');
+        $this->assertSame('<p>foo &amp; bar</p>', $html);
+    }
+
+    public function testInvalidNamedEntityIsEscaped(): void
+    {
+        $html = $this->parser->parse('&notanentity;');
+        $this->assertSame('<p>&amp;notanentity;</p>', $html);
+    }
+
+    public function testEntityInCodeSpanIsDoubleEscaped(): void
+    {
+        // Inside a code span the raw &amp; is passed to esc() → &amp;amp;
+        $html = $this->parser->parse('`&amp;`');
+        $this->assertSame('<p><code>&amp;amp;</code></p>', $html);
+    }
+
+    public function testLtAndGtEntitiesPassThrough(): void
+    {
+        $html = $this->parser->parse('a &lt; b &gt; c');
+        $this->assertSame('<p>a &lt; b &gt; c</p>', $html);
+    }
+
+    public function testEntityInsideLinkTextPassesThrough(): void
+    {
+        $html = $this->parser->parse('[foo &amp; bar](https://example.com)');
+        $this->assertSame('<p><a href="https://example.com">foo &amp; bar</a></p>', $html);
+    }
+
+    public function testNullCodepointEntityIsEscaped(): void
+    {
+        $html = $this->parser->parse('&#0;');
+        $this->assertSame('<p>&amp;#0;</p>', $html);
+    }
+
+    public function testSurrogateEntityIsEscaped(): void
+    {
+        $html = $this->parser->parse('&#xD800;');
+        $this->assertSame('<p>&amp;#xD800;</p>', $html);
+    }
+
+    public function testEntityAtStartOfParagraph(): void
+    {
+        $html = $this->parser->parse('&amp; start');
+        $this->assertSame('<p>&amp; start</p>', $html);
+    }
+
+    public function testEntityAtEndOfParagraph(): void
+    {
+        $html = $this->parser->parse('end &amp;');
+        $this->assertSame('<p>end &amp;</p>', $html);
+    }
 }

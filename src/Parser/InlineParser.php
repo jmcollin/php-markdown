@@ -6,6 +6,7 @@ namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
+use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
@@ -30,6 +31,14 @@ final class InlineParser
     private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+
+    /**
+     * Matches a well-formed HTML entity at the current position:
+     *   - numeric decimal:  &#[0-9]{1,7};
+     *   - numeric hex:      &#[xX][0-9A-Fa-f]{1,6};
+     *   - named:            &[A-Za-z][A-Za-z0-9]{1,31};
+     */
+    private const PATTERN_ENTITY = '/\G&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/';
 
     /** @var array<string, array{href: string, title: ?string}> */
     private array $refs = [];
@@ -84,6 +93,66 @@ final class InlineParser
                 }
                 $buffer .= $char;
                 $pos++;
+                continue;
+            }
+
+            // ── HTML entity: &amp;  &#160;  &#x00A0; ─────────────────────────
+            if ($char === '&') {
+                if (!preg_match(self::PATTERN_ENTITY, $text, $m, 0, $pos)) {
+                    // Bare & with no valid entity syntax → buffer as-is; renderer escapes it.
+                    $buffer .= '&';
+                    $pos++;
+                    continue;
+                }
+
+                $raw = $m[0];
+
+                // Determine whether this is a numeric or named entity.
+                if ($raw[1] === '#') {
+                    // Numeric entity — extract the codepoint.
+                    $inner = substr($raw, 2, -1); // strip leading '&#' and trailing ';'
+                    if ($inner[0] === 'x' || $inner[0] === 'X') {
+                        $codepoint = hexdec(substr($inner, 1));
+                    } else {
+                        $codepoint = (int) $inner;
+                    }
+
+                    // Reject invalid / dangerous codepoints (CommonMark §2.5 & HTML5 §8.1.4).
+                    $valid = !(
+                        $codepoint === 0                             // NUL
+                        || ($codepoint >= 0x0001 && $codepoint <= 0x001F
+                            && $codepoint !== 0x0009                // TAB
+                            && $codepoint !== 0x000A                // LF
+                            && $codepoint !== 0x000D)               // CR
+                        || $codepoint === 0x007F                    // DEL
+                        || ($codepoint >= 0xD800 && $codepoint <= 0xDFFF) // surrogates
+                        || ($codepoint >= 0xFDD0 && $codepoint <= 0xFDEF) // non-characters
+                        || $codepoint === 0xFFFE
+                        || $codepoint === 0xFFFF
+                        || $codepoint > 0x10FFFF                    // beyond Unicode range
+                    );
+
+                    if (!$valid) {
+                        $buffer .= $raw;
+                        $pos    += strlen($raw);
+                        continue;
+                    }
+                } else {
+                    // Named entity — PHP recognises it if html_entity_decode changes it.
+                    $decoded = html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    if ($decoded === $raw) {
+                        // PHP did not recognise the name → treat as literal text.
+                        $buffer .= $raw;
+                        $pos    += strlen($raw);
+                        continue;
+                    }
+                }
+
+                // Valid entity: flush pending buffer, emit node, advance.
+                $nodes   = $this->flushBuffer($buffer, $nodes);
+                $buffer  = '';
+                $nodes[] = new HtmlEntityNode($raw);
+                $pos    += strlen($raw);
                 continue;
             }
 
