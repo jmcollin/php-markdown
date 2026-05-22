@@ -24,6 +24,9 @@ final class Lexer
     private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
     private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
     private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
+    private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
+    private const PATTERN_COLUMNS_CLOSE    = '/^:::$/';
+    private const PATTERN_COLUMNS_SEP      = '/^\|\|\|$/';
 
     /**
      * Block-level HTML tags that trigger HTML_BLOCK detection (CommonMark §4.6).
@@ -81,6 +84,11 @@ final class Lexer
         $htmlLines = [];
         $htmlCommentPending = false; // true when inside <!-- ... --> spanning multiple lines
 
+        $inColumnsBlock    = false;
+        $columnsSepFound   = false;
+        $columnsLeftLines  = [];
+        $columnsRightLines = [];
+
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
 
@@ -121,6 +129,46 @@ final class Lexer
                 }
 
                 $htmlLines[] = $line;
+                continue;
+            }
+
+            if ($inColumnsBlock) {
+                if (preg_match(self::PATTERN_COLUMNS_CLOSE, $line)) {
+                    if ($pendingToken !== null) {
+                        $tokens[] = $pendingToken;
+                        $pendingToken = null;
+                    }
+                    $tokens[] = new Token(
+                        TokenType::COLUMNS_CONTAINER,
+                        '',
+                        [
+                            'left_raw'  => implode("\n", $columnsLeftLines),
+                            'right_raw' => implode("\n", $columnsRightLines),
+                        ],
+                    );
+                    $inColumnsBlock    = false;
+                    $columnsSepFound   = false;
+                    $columnsLeftLines  = [];
+                    $columnsRightLines = [];
+                } elseif (preg_match(self::PATTERN_COLUMNS_SEP, $line) && !$columnsSepFound) {
+                    $columnsSepFound = true;
+                } elseif (!$columnsSepFound) {
+                    $columnsLeftLines[] = $line;
+                } else {
+                    $columnsRightLines[] = $line;
+                }
+                continue;
+            }
+
+            if (preg_match(self::PATTERN_COLUMNS_OPEN, $line)) {
+                if ($pendingToken !== null) {
+                    $tokens[] = $pendingToken;
+                    $pendingToken = null;
+                }
+                $inColumnsBlock    = true;
+                $columnsSepFound   = false;
+                $columnsLeftLines  = [];
+                $columnsRightLines = [];
                 continue;
             }
 
@@ -223,6 +271,18 @@ final class Lexer
                 TokenType::FENCED_CODE,
                 implode("\n", $fencedLines),
                 ['language' => $fencedLanguage],
+            );
+        }
+
+        // Unclosed columns block — emit what was collected
+        if ($inColumnsBlock) {
+            $tokens[] = new Token(
+                TokenType::COLUMNS_CONTAINER,
+                '',
+                [
+                    'left_raw'  => implode("\n", $columnsLeftLines),
+                    'right_raw' => implode("\n", $columnsRightLines),
+                ],
             );
         }
 

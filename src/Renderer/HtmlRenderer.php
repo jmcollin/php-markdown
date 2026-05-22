@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PhpMarkdown\Renderer;
 
 use PhpMarkdown\Node\Block\BlockquoteNode;
+use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
@@ -63,7 +64,6 @@ final class HtmlRenderer
             $node instanceof ImageNode        => $this->renderImage($node),
             $node instanceof TableNode        => $this->renderTable($node),
             $node instanceof TableRowNode     => $this->renderTableRow($node),
-            // S29: escaped fallback — S31 will replace esc() with HtmlSanitizer::sanitize()
             $node instanceof RawHtmlInlineNode => $this->esc($node->content),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
@@ -169,13 +169,30 @@ final class HtmlRenderer
 
     private function renderTableCell(TableCellNode $node, bool $isHeader = false): string
     {
-        $tag       = $isHeader ? 'th' : 'td';
-        $alignAttr = $node->align !== '' ? ' align="' . $this->esc($node->align) . '"' : '';
+        $tag = $isHeader ? 'th' : 'td';
+        // Allowlist: parseAlignments() already constrains to these values, but explicit guard prevents
+        // any future refactor from accidentally passing raw user input into an HTML attribute.
+        $align     = in_array($node->align, ['left', 'right', 'center'], true) ? $node->align : '';
+        $alignAttr = $align !== '' ? ' align="' . $align . '"' : '';
         return '<' . $tag . $alignAttr . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+    }
+
+    private function renderColumns(ColumnsNode $node): string
+    {
+        return '<div class="grid grid-cols-2 gap-4">'
+            . '<div class="min-w-0">' . $this->renderChildren($node->leftChildren) . '</div>'
+            . '<div class="min-w-0">' . $this->renderChildren($node->rightChildren) . '</div>'
+            . '</div>';
     }
 
     private function esc(string $value): string
     {
-        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        // Strip null bytes before encoding: \x00 is not a special HTML char so htmlspecialchars
+        // passes it through, but some parsers and WAFs misinterpret payloads containing it.
+        return htmlspecialchars(
+            str_replace("\x00", '', $value),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 }
