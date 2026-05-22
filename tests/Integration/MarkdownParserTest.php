@@ -5,7 +5,14 @@ declare(strict_types=1);
 namespace PhpMarkdown\Tests\Integration;
 
 use PhpMarkdown\Exception\ParseException;
+use PhpMarkdown\Lexer\Lexer;
 use PhpMarkdown\MarkdownParser;
+use PhpMarkdown\Node\Block\HeadingNode;
+use PhpMarkdown\Node\Block\ParagraphNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
+use PhpMarkdown\Node\Inline\TextNode;
+use PhpMarkdown\Parser\Parser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
@@ -560,5 +567,80 @@ final class MarkdownParserTest extends TestCase
         // Blank line separation of paragraphs must not regress.
         $html = $this->parser->parse("para one\n\npara two");
         $this->assertSame('<p>para one</p><p>para two</p>', $html);
+    }
+
+    // ── Inline HTML in headings — full pipeline (story 29) ───────────────────
+
+    public function testHeadingPipelineProducesCorrectInlineHtmlChildren(): void
+    {
+        // Verifies the full Lexer→Parser pipeline (not just the renderer) for
+        // a heading that contains an inline HTML tag pair wrapping plain text.
+        // Expected child sequence: TextNode("Title "), RawHtmlInlineNode("<sup>"),
+        //                          TextNode("1"), RawHtmlInlineNode("</sup>").
+        $lexer  = new Lexer();
+        $parser = new Parser();
+
+        $doc = $parser->parse($lexer->tokenize('# Title <sup>1</sup>'));
+
+        $this->assertCount(1, $doc->children);
+        $heading = $doc->children[0];
+        $this->assertInstanceOf(HeadingNode::class, $heading);
+        $this->assertSame(1, $heading->level);
+
+        $children = $heading->children;
+        $this->assertCount(4, $children, 'Expected 4 inline children in the heading');
+
+        $this->assertInstanceOf(TextNode::class, $children[0]);
+        $this->assertSame('Title ', $children[0]->text);
+
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $children[1]);
+        $this->assertSame('<sup>', $children[1]->content);
+
+        $this->assertInstanceOf(TextNode::class, $children[2]);
+        $this->assertSame('1', $children[2]->text);
+
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $children[3]);
+        $this->assertSame('</sup>', $children[3]->content);
+    }
+
+    // ── HardBreak regression guard (story 29) ────────────────────────────────
+
+    public function testHardBreakIsNotMisidentifiedAsRawHtmlInline(): void
+    {
+        // Two trailing spaces before \n must produce a HardBreakNode in the AST,
+        // never a RawHtmlInlineNode. Guards against the inline-HTML detector
+        // accidentally consuming whitespace sequences that look like tag fragments.
+        $lexer  = new Lexer();
+        $parser = new Parser();
+
+        $doc = $parser->parse($lexer->tokenize("foo  \nbar"));
+
+        // HTML output must be the canonical hard-break form.
+        $html = $this->parser->parse("foo  \nbar");
+        $this->assertSame('<p>foo<br>bar</p>', $html);
+
+        // AST: single ParagraphNode child.
+        $this->assertCount(1, $doc->children);
+        $para = $doc->children[0];
+        $this->assertInstanceOf(ParagraphNode::class, $para);
+
+        // No RawHtmlInlineNode anywhere in the paragraph children.
+        foreach ($para->children as $node) {
+            $this->assertNotInstanceOf(
+                RawHtmlInlineNode::class,
+                $node,
+                'RawHtmlInlineNode must not appear in a paragraph that only has a hard break',
+            );
+        }
+
+        // A HardBreakNode must be present.
+        $hasHardBreak = false;
+        foreach ($para->children as $node) {
+            if ($node instanceof HardBreakNode) {
+                $hasHardBreak = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasHardBreak, 'HardBreakNode must be present in paragraph children');
     }
 }

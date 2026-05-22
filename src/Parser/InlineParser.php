@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
@@ -30,6 +31,10 @@ final class InlineParser
     private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+    // CommonMark §6.6 — inline HTML tag: comment, closing tag, or opening/void tag.
+    // \G anchors to current $pos offset. The s modifier allows . to span newlines in comments.
+    private const PATTERN_RAW_HTML_INLINE =
+        '/\G<(?:!--.*?-->|\/[a-zA-Z][^>]*>|[a-zA-Z][^>]*\/?>)/s';
 
     /** @var array<string, array{href: string, title: ?string}> */
     private array $refs = [];
@@ -229,6 +234,18 @@ final class InlineParser
                 $buffer .= $char;
                 $pos++;
                 continue;
+            }
+
+            // ── Raw inline HTML: <tag>, </tag>, <!-- comment --> (§6.6) ──────
+            if ($char === '<') {
+                if (preg_match(self::PATTERN_RAW_HTML_INLINE, $text, $m, 0, $pos)) {
+                    $nodes = $this->flushBuffer($buffer, $nodes);
+                    $buffer = '';
+                    $nodes[] = new RawHtmlInlineNode($m[0]);
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+                // No match (e.g. <3, < p>) — fall through to catch-all.
             }
 
             $buffer .= $char;
