@@ -26,6 +26,39 @@ final class Lexer
     private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
 
     /**
+     * Block-level HTML tags that trigger HTML_BLOCK detection (CommonMark §4.6).
+     * Sorted for readability; used to build PATTERN_HTML_BLOCK_TAG at construction time.
+     */
+    private const BLOCK_TAGS = [
+        'address', 'article', 'aside', 'blockquote', 'canvas',
+        'dd', 'details', 'dialog', 'div', 'dl', 'dt',
+        'fieldset', 'figcaption', 'figure', 'footer', 'form',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'header', 'hgroup', 'hr', 'li', 'main', 'menu', 'nav', 'noscript',
+        'ol', 'p', 'pre', 'section', 'summary',
+        'table', 'ul',
+    ];
+
+    /**
+     * Matches a line that opens a block-level HTML construct (CommonMark §4.6):
+     *   - Open/close tag of a block-level element (up to 3 leading spaces)
+     *   - HTML comment <!-- ... -->
+     *   - <!DOCTYPE ...>
+     *
+     * Capture group 1: the stripped line content.
+     */
+    private readonly string $patternHtmlBlockStart;
+
+    public function __construct()
+    {
+        $tags = implode('|', self::BLOCK_TAGS);
+        // Matches: optional 0-3 leading spaces, then an open OR close block tag,
+        // OR an HTML comment opener, OR a <!DOCTYPE declaration.
+        $this->patternHtmlBlockStart =
+            '/^ {0,3}(?:<(?:' . $tags . ')(?:\s|>|\/|$)|<\/(?:' . $tags . ')(?:\s|>|$)|<!--.*?-->$|<!--.*$|<!DOCTYPE\s)/i';
+    }
+
+    /**
      * @return Token[]
      */
     public function tokenize(string $markdown): array
@@ -44,8 +77,52 @@ final class Lexer
         $fencedLines = [];
         $pendingToken = null;
 
+        $inHtmlBlock = false;
+        $htmlLines = [];
+        $htmlCommentPending = false; // true when inside <!-- ... --> spanning multiple lines
+
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
+
+            // Collect lines for an in-progress HTML block.
+            // The block ends on the first blank line (CommonMark §4.6 type 6/7).
+            // Comment blocks (<!-- ... -->) end when --> is found.
+            if ($inHtmlBlock) {
+                if ($htmlCommentPending) {
+                    // CommonMark §4.6 type 2: blank line before --> flushes without the blank.
+                    if ($line === '' || ctype_space($line)) {
+                        $tokens[] = new Token(TokenType::HTML_BLOCK, implode("\n", $htmlLines));
+                        $tokens[] = new Token(TokenType::BLANK, '');
+                        $inHtmlBlock = false;
+                        $htmlLines = [];
+                        $htmlCommentPending = false;
+                        continue;
+                    }
+                    // CommonMark §4.6 type 2: block ends on the line containing -->.
+                    if (str_contains($line, '-->')) {
+                        $htmlLines[] = $line;
+                        $tokens[] = new Token(TokenType::HTML_BLOCK, implode("\n", $htmlLines));
+                        $inHtmlBlock = false;
+                        $htmlLines = [];
+                        $htmlCommentPending = false;
+                        continue;
+                    }
+                    $htmlLines[] = $line;
+                    continue;
+                }
+
+                if ($line === '' || ctype_space($line)) {
+                    // Blank line terminates the HTML block (CommonMark §4.6 type 6).
+                    $tokens[] = new Token(TokenType::HTML_BLOCK, implode("\n", $htmlLines));
+                    $tokens[] = new Token(TokenType::BLANK, '');
+                    $inHtmlBlock = false;
+                    $htmlLines = [];
+                    continue;
+                }
+
+                $htmlLines[] = $line;
+                continue;
+            }
 
             if ($inFencedBlock) {
                 if (preg_match(self::PATTERN_FENCED_CLOSE, $line)) {
@@ -75,6 +152,31 @@ final class Lexer
                 $inFencedBlock = true;
                 $fencedLanguage = $m[2];
                 $fencedLines = [];
+                continue;
+            }
+
+            // HTML block detection (CommonMark §4.6).
+            // Must run before setext/paragraph logic so that block-level HTML tags
+            // are not consumed as paragraphs.
+            if (preg_match($this->patternHtmlBlockStart, $line)) {
+                if ($pendingToken !== null) {
+                    $tokens[] = $pendingToken;
+                    $pendingToken = null;
+                }
+                // Detect whether this is an HTML comment opener.
+                $isCommentStart = str_starts_with(ltrim($line), '<!--');
+                $isCommentClosed = $isCommentStart && str_contains($line, '-->');
+
+                // CommonMark §4.6 type 2: a self-contained comment (<!-- ... --> on one line)
+                // ends immediately — no multi-line block state needed.
+                if ($isCommentStart && $isCommentClosed) {
+                    $tokens[] = new Token(TokenType::HTML_BLOCK, $line);
+                    continue;
+                }
+
+                $inHtmlBlock = true;
+                $htmlLines = [$line];
+                $htmlCommentPending = $isCommentStart;
                 continue;
             }
 
@@ -108,6 +210,11 @@ final class Lexer
         // Flush any remaining pending token
         if ($pendingToken !== null) {
             $tokens[] = $pendingToken;
+        }
+
+        // Unclosed HTML block at end of input — emit what was collected.
+        if ($inHtmlBlock && $htmlLines !== []) {
+            $tokens[] = new Token(TokenType::HTML_BLOCK, implode("\n", $htmlLines));
         }
 
         // Unclosed fenced block — emit what was collected

@@ -15,6 +15,7 @@ use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
 use PhpMarkdown\Node\Block\ListNode;
 use PhpMarkdown\Node\Block\ParagraphNode;
+use PhpMarkdown\Node\Block\RawHtmlBlockNode;
 use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
@@ -79,6 +80,12 @@ final class Parser
 
             if ($token->type === TokenType::HORIZONTAL_RULE) {
                 $children[] = new HorizontalRuleNode();
+                $i++;
+                continue;
+            }
+
+            if ($token->type === TokenType::HTML_BLOCK) {
+                $children[] = new RawHtmlBlockNode(content: $token->content);
                 $i++;
                 continue;
             }

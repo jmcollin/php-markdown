@@ -12,6 +12,7 @@ use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
 use PhpMarkdown\Node\Block\ListNode;
 use PhpMarkdown\Node\Block\ParagraphNode;
+use PhpMarkdown\Node\Block\RawHtmlBlockNode;
 use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
@@ -49,6 +50,8 @@ final class HtmlRenderer
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
             $node instanceof HorizontalRuleNode => '<hr>',
+            // Raw HTML blocks are emitted verbatim — no escaping (CommonMark §4.6).
+            $node instanceof RawHtmlBlockNode => $node->content,
             $node instanceof HardBreakNode    => '<br>',
             $node instanceof TextNode         => $this->esc($node->text),
             $node instanceof StrongNode       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
