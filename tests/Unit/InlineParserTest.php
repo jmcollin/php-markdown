@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
@@ -194,12 +195,15 @@ final class InlineParserTest extends TestCase
 
     public function testImageAngleBracketUrlBlocked(): void
     {
-        // <javascript:...> style bypass must not produce ImageNode
+        // <javascript:...> style bypass must not produce ImageNode.
+        // Angle brackets are excluded from the URL capture group, so the image regex fails.
+        // After §6.6: <javascript:alert(1)> is recognized as a RawHtmlInlineNode (tag-agnostic
+        // parser); no ImageNode is produced, which is the security invariant.
         $nodes = $this->parser->parse('![x](<javascript:alert(1)>)');
 
-        // Angle brackets excluded from URL capture — the whole thing is a TextNode
-        $this->assertCount(1, $nodes);
-        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        foreach ($nodes as $node) {
+            $this->assertNotInstanceOf(\PhpMarkdown\Node\Inline\ImageNode::class, $node);
+        }
     }
 
     public function testStrikethroughSimple(): void
@@ -459,5 +463,141 @@ final class InlineParserTest extends TestCase
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
         $this->assertSame('[contact][evil]', $nodes[0]->text);
+    }
+
+    // ── Raw inline HTML (§6.6) ──────────────────────────────────────────────
+
+    public function testSpanTagProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('<span>');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<span>', $nodes[0]->content);
+    }
+
+    public function testClosingTagProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('</span>');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('</span>', $nodes[0]->content);
+    }
+
+    public function testBrVoidTagProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('<br>');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<br>', $nodes[0]->content);
+    }
+
+    public function testBrSelfClosingTagProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('<br/>');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<br/>', $nodes[0]->content);
+    }
+
+    public function testHtmlCommentProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('<!-- note -->');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<!-- note -->', $nodes[0]->content);
+    }
+
+    public function testSingleQuotedAttributePreserved(): void
+    {
+        $nodes = $this->parser->parse("<span class='hi'>");
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame("<span class='hi'>", $nodes[0]->content);
+    }
+
+    public function testUnclosedAngleBracketIsLiteralText(): void
+    {
+        $nodes = $this->parser->parse('<span');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('<span', $nodes[0]->text);
+    }
+
+    public function testSpanWithAttributeProducesRawHtmlInlineNode(): void
+    {
+        $nodes = $this->parser->parse('<span class="hi">');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<span class="hi">', $nodes[0]->content);
+    }
+
+    public function testTextAroundInlineTagsSplitCorrectly(): void
+    {
+        $nodes = $this->parser->parse('text <span class="hi">word</span> more');
+
+        $this->assertCount(5, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('text ', $nodes[0]->text);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[1]);
+        $this->assertSame('<span class="hi">', $nodes[1]->content);
+        $this->assertInstanceOf(TextNode::class, $nodes[2]);
+        $this->assertSame('word', $nodes[2]->text);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[3]);
+        $this->assertSame('</span>', $nodes[3]->content);
+        $this->assertInstanceOf(TextNode::class, $nodes[4]);
+        $this->assertSame(' more', $nodes[4]->text);
+    }
+
+    public function testInlineTagAdjacentToText(): void
+    {
+        $nodes = $this->parser->parse('line one<br>line two');
+
+        $this->assertCount(3, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('line one', $nodes[0]->text);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[1]);
+        $this->assertSame('<br>', $nodes[1]->content);
+        $this->assertInstanceOf(TextNode::class, $nodes[2]);
+        $this->assertSame('line two', $nodes[2]->text);
+    }
+
+    public function testMarkdownInsideTagsNotParsedAsTag(): void
+    {
+        // Content between tags is parsed normally by scan(); **not bold** becomes StrongNode.
+        $nodes = $this->parser->parse('<span>**not bold**</span>');
+
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<span>', $nodes[0]->content);
+        $this->assertInstanceOf(StrongNode::class, $nodes[1]);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[2]);
+        $this->assertSame('</span>', $nodes[2]->content);
+    }
+
+    public function testScriptTagIsRawHtmlInlineNode(): void
+    {
+        // The parser is tag-agnostic; the renderer owns escaping.
+        $nodes = $this->parser->parse('<script>');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $nodes[0]);
+        $this->assertSame('<script>', $nodes[0]->content);
+    }
+
+    public function testLessThanWithNonLetterIsLiteralText(): void
+    {
+        // < followed by space is not a valid tag open — falls through to buffer.
+        $nodes = $this->parser->parse('a < b');
+
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(TextNode::class, $nodes[0]);
+        $this->assertSame('a < b', $nodes[0]->text);
     }
 }

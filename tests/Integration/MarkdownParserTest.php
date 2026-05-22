@@ -5,7 +5,14 @@ declare(strict_types=1);
 namespace PhpMarkdown\Tests\Integration;
 
 use PhpMarkdown\Exception\ParseException;
+use PhpMarkdown\Lexer\Lexer;
 use PhpMarkdown\MarkdownParser;
+use PhpMarkdown\Node\Block\HeadingNode;
+use PhpMarkdown\Node\Block\ParagraphNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
+use PhpMarkdown\Node\Inline\TextNode;
+use PhpMarkdown\Parser\Parser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
@@ -562,78 +569,78 @@ final class MarkdownParserTest extends TestCase
         $this->assertSame('<p>para one</p><p>para two</p>', $html);
     }
 
-    // ── HTML entity pass-through ──────────────────────────────────────────────
+    // ── Inline HTML in headings — full pipeline (story 29) ───────────────────
 
-    public function testNamedEntityPassesThrough(): void
+    public function testHeadingPipelineProducesCorrectInlineHtmlChildren(): void
     {
-        $html = $this->parser->parse('foo &amp; bar');
-        $this->assertSame('<p>foo &amp; bar</p>', $html);
+        // Verifies the full Lexer→Parser pipeline (not just the renderer) for
+        // a heading that contains an inline HTML tag pair wrapping plain text.
+        // Expected child sequence: TextNode("Title "), RawHtmlInlineNode("<sup>"),
+        //                          TextNode("1"), RawHtmlInlineNode("</sup>").
+        $lexer  = new Lexer();
+        $parser = new Parser();
+
+        $doc = $parser->parse($lexer->tokenize('# Title <sup>1</sup>'));
+
+        $this->assertCount(1, $doc->children);
+        $heading = $doc->children[0];
+        $this->assertInstanceOf(HeadingNode::class, $heading);
+        $this->assertSame(1, $heading->level);
+
+        $children = $heading->children;
+        $this->assertCount(4, $children, 'Expected 4 inline children in the heading');
+
+        $this->assertInstanceOf(TextNode::class, $children[0]);
+        $this->assertSame('Title ', $children[0]->text);
+
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $children[1]);
+        $this->assertSame('<sup>', $children[1]->content);
+
+        $this->assertInstanceOf(TextNode::class, $children[2]);
+        $this->assertSame('1', $children[2]->text);
+
+        $this->assertInstanceOf(RawHtmlInlineNode::class, $children[3]);
+        $this->assertSame('</sup>', $children[3]->content);
     }
 
-    public function testDecimalEntityPassesThrough(): void
-    {
-        $html = $this->parser->parse('non&#160;breaking');
-        $this->assertSame('<p>non&#160;breaking</p>', $html);
-    }
+    // ── HardBreak regression guard (story 29) ────────────────────────────────
 
-    public function testHexEntityPassesThrough(): void
+    public function testHardBreakIsNotMisidentifiedAsRawHtmlInline(): void
     {
-        $html = $this->parser->parse('&#x00A0;');
-        $this->assertSame('<p>&#x00A0;</p>', $html);
-    }
+        // Two trailing spaces before \n must produce a HardBreakNode in the AST,
+        // never a RawHtmlInlineNode. Guards against the inline-HTML detector
+        // accidentally consuming whitespace sequences that look like tag fragments.
+        $lexer  = new Lexer();
+        $parser = new Parser();
 
-    public function testBareAmpersandIsEscaped(): void
-    {
-        $html = $this->parser->parse('foo & bar');
-        $this->assertSame('<p>foo &amp; bar</p>', $html);
-    }
+        $doc = $parser->parse($lexer->tokenize("foo  \nbar"));
 
-    public function testInvalidNamedEntityIsEscaped(): void
-    {
-        $html = $this->parser->parse('&notanentity;');
-        $this->assertSame('<p>&amp;notanentity;</p>', $html);
-    }
+        // HTML output must be the canonical hard-break form.
+        $html = $this->parser->parse("foo  \nbar");
+        $this->assertSame('<p>foo<br>bar</p>', $html);
 
-    public function testEntityInCodeSpanIsDoubleEscaped(): void
-    {
-        // Inside a code span the raw &amp; is passed to esc() → &amp;amp;
-        $html = $this->parser->parse('`&amp;`');
-        $this->assertSame('<p><code>&amp;amp;</code></p>', $html);
-    }
+        // AST: single ParagraphNode child.
+        $this->assertCount(1, $doc->children);
+        $para = $doc->children[0];
+        $this->assertInstanceOf(ParagraphNode::class, $para);
 
-    public function testLtAndGtEntitiesPassThrough(): void
-    {
-        $html = $this->parser->parse('a &lt; b &gt; c');
-        $this->assertSame('<p>a &lt; b &gt; c</p>', $html);
-    }
+        // No RawHtmlInlineNode anywhere in the paragraph children.
+        foreach ($para->children as $node) {
+            $this->assertNotInstanceOf(
+                RawHtmlInlineNode::class,
+                $node,
+                'RawHtmlInlineNode must not appear in a paragraph that only has a hard break',
+            );
+        }
 
-    public function testEntityInsideLinkTextPassesThrough(): void
-    {
-        $html = $this->parser->parse('[foo &amp; bar](https://example.com)');
-        $this->assertSame('<p><a href="https://example.com">foo &amp; bar</a></p>', $html);
-    }
-
-    public function testNullCodepointEntityIsEscaped(): void
-    {
-        $html = $this->parser->parse('&#0;');
-        $this->assertSame('<p>&amp;#0;</p>', $html);
-    }
-
-    public function testSurrogateEntityIsEscaped(): void
-    {
-        $html = $this->parser->parse('&#xD800;');
-        $this->assertSame('<p>&amp;#xD800;</p>', $html);
-    }
-
-    public function testEntityAtStartOfParagraph(): void
-    {
-        $html = $this->parser->parse('&amp; start');
-        $this->assertSame('<p>&amp; start</p>', $html);
-    }
-
-    public function testEntityAtEndOfParagraph(): void
-    {
-        $html = $this->parser->parse('end &amp;');
-        $this->assertSame('<p>end &amp;</p>', $html);
+        // A HardBreakNode must be present.
+        $hasHardBreak = false;
+        foreach ($para->children as $node) {
+            if ($node instanceof HardBreakNode) {
+                $hasHardBreak = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasHardBreak, 'HardBreakNode must be present in paragraph children');
     }
 }

@@ -24,6 +24,7 @@ use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
@@ -66,7 +67,7 @@ final class HtmlRenderer
             $node instanceof ImageNode        => $this->renderImage($node),
             $node instanceof TableNode        => $this->renderTable($node),
             $node instanceof TableRowNode     => $this->renderTableRow($node),
-            $node instanceof ColumnsNode      => $this->renderColumns($node),
+            $node instanceof RawHtmlInlineNode => $this->esc($node->content),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
