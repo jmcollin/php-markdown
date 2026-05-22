@@ -191,10 +191,11 @@ final class ColumnsRendererTest extends TestCase
     {
         $out = $this->renderMarkdown(":::columns\n&lt;script&gt;alert(1)&lt;/script&gt;\n|||\nok\n:::");
 
-        // htmlspecialchars double-encodes the entities: &lt; becomes &amp;lt; — no live <script> tag.
+        // &lt; and &gt; are valid HTML entities and pass through verbatim (InlineParser entity branch).
+        // The output contains &lt;script&gt; — safe in HTML because the browser renders it as text,
+        // not as a live <script> tag.
         $this->assertStringNotContainsString('<script>', $out);
-        // The ampersand is encoded, proving no tag injection occurred.
-        $this->assertStringContainsString('&amp;lt;script&amp;gt;', $out);
+        $this->assertStringContainsString('&lt;script&gt;', $out);
     }
 
     public function testXssClassAttributesAreHardCodedLiterals(): void
