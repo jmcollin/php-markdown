@@ -643,4 +643,50 @@ final class MarkdownParserTest extends TestCase
         }
         $this->assertTrue($hasHardBreak, 'HardBreakNode must be present in paragraph children');
     }
+
+    // ── Raw HTML rendering ────────────────────────────────────────────────────
+
+    public function testParseDefaultEscapesRawHtmlBlock(): void
+    {
+        // Default mode: raw block HTML is escaped — XSS-safe by default.
+        // Output is bare escaped text with no <p> wrapper.
+        $html = $this->parser->parse('<div>raw</div>');
+
+        $this->assertSame('&lt;div&gt;raw&lt;/div&gt;', $html);
+    }
+
+    public function testParseWithAllowRawHtmlPassesThroughBlock(): void
+    {
+        // allowRawHtml: true — sanitizer allows the clean block through.
+        $html = $this->parser->parse('<div class="box">content</div>', allowRawHtml: true);
+
+        $this->assertStringContainsString('<div class="box">content</div>', $html);
+    }
+
+    public function testParseWithAllowRawHtmlStripsScriptInBlockTag(): void
+    {
+        // allowRawHtml: true — a <div> block containing a nested <script> is lexed as HTML_BLOCK.
+        // The sanitizer strips the dangerous <script> child while keeping the outer <div>.
+        $html = $this->parser->parse("<div>\n<script>alert(1)</script>\n</div>", allowRawHtml: true);
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringNotContainsString('alert(1)', $html);
+        $this->assertStringContainsString('<div>', $html);
+    }
+
+    public function testParseWithMetaAllowRawHtmlPassesThroughBlock(): void
+    {
+        // parseWithMeta() uses the same allowRawHtml wiring as parse().
+        $result = $this->parser->parseWithMeta('<div>hello</div>', allowRawHtml: true);
+
+        $this->assertStringContainsString('<div>hello</div>', $result['html']);
+    }
+
+    public function testParseBackwardCompatibilityDefaultParam(): void
+    {
+        // Existing callers of parse($md) still work — no exception, returns string.
+        $html = $this->parser->parse('hello');
+
+        $this->assertSame('<p>hello</p>', $html);
+    }
 }

@@ -267,21 +267,23 @@ final class HtmlBlockLexerTest extends TestCase
 
     public function testRawHtmlBlockRenderedVerbatim(): void
     {
-        // The renderer must emit block HTML as-is without escaping.
-        // Rationale: escaping would corrupt valid HTML (e.g. attributes with quotes).
+        // allowRawHtml: true — renderer passes block HTML through the sanitizer.
+        // Attributes on allowlisted tags are preserved.
         $mp   = new MarkdownParser();
-        $html = $mp->parse('<div class="x">hello</div>');
+        $html = $mp->parse('<div class="x">hello</div>', allowRawHtml: true);
 
         $this->assertStringContainsString('<div class="x">hello</div>', $html);
     }
 
     public function testRawHtmlBlockNotWrappedInParagraph(): void
     {
-        // A block HTML node must NOT be wrapped in <p> tags.
+        // A block HTML node must NOT be wrapped in <p> tags — in either mode.
+        // With allowRawHtml: true — sanitizer pass-through, still no <p> wrapper.
         $mp   = new MarkdownParser();
-        $html = $mp->parse('<div>content</div>');
+        $html = $mp->parse('<div>content</div>', allowRawHtml: true);
 
         $this->assertStringNotContainsString('<p>', $html);
+        $this->assertStringContainsString('<div>content</div>', $html);
     }
 
     public function testFourSpaceIndentIsNotHtmlBlock(): void

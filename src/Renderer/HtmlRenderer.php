@@ -29,15 +29,23 @@ use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\NodeInterface;
+use PhpMarkdown\Sanitizer\HtmlSanitizer;
 
 /**
- * Stateless HTML5 renderer.
+ * HTML5 renderer.
  *
  * XSS rule: every user-supplied string passes through esc() before output.
  * This includes TextNode text, code content, and all HTML attributes.
+ * Raw HTML is escaped by default; pass allowRawHtml: true to enable sanitized pass-through.
  */
 final class HtmlRenderer
 {
+    public function __construct(
+        private readonly bool $allowRawHtml = false,
+        private readonly HtmlSanitizer $sanitizer = new HtmlSanitizer(),
+    ) {
+    }
+
     public function render(DocumentNode $document): string
     {
         return $this->renderChildren($document->children);
@@ -53,8 +61,12 @@ final class HtmlRenderer
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
             $node instanceof HorizontalRuleNode => '<hr>',
-            // Raw HTML blocks are emitted verbatim — no escaping (CommonMark §4.6).
-            $node instanceof RawHtmlBlockNode => $node->content,
+            $node instanceof ColumnsNode       => $this->renderColumns($node),
+            // Raw HTML blocks: sanitize if allowRawHtml, else escape (XSS-safe default).
+            $node instanceof RawHtmlBlockNode =>
+                $this->allowRawHtml
+                    ? $this->sanitizer->sanitize($node->content)
+                    : $this->esc($node->content),
             $node instanceof HardBreakNode    => '<br>',
             // HTML entities pass through verbatim — validated by InlineParser, no esc() needed.
             $node instanceof HtmlEntityNode   => $node->entity,
@@ -67,7 +79,12 @@ final class HtmlRenderer
             $node instanceof ImageNode        => $this->renderImage($node),
             $node instanceof TableNode        => $this->renderTable($node),
             $node instanceof TableRowNode     => $this->renderTableRow($node),
-            $node instanceof RawHtmlInlineNode => $this->esc($node->content),
+            // Inline HTML: regex-strip dangerous attrs if allowRawHtml (DOMDocument auto-closes fragments),
+            // else escape. Strips on*, style, and javascript:/data: URL attrs.
+            $node instanceof RawHtmlInlineNode =>
+                $this->allowRawHtml
+                    ? $this->stripInlineAttrs($node->content)
+                    : $this->esc($node->content),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
@@ -186,6 +203,21 @@ final class HtmlRenderer
             . '<div class="min-w-0">' . $this->renderChildren($node->leftChildren) . '</div>'
             . '<div class="min-w-0">' . $this->renderChildren($node->rightChildren) . '</div>'
             . '</div>';
+    }
+
+    private function stripInlineAttrs(string $tag): string
+    {
+        // Strip all on* event handler attributes (onclick, onerror, onload, etc.).
+        $tag = preg_replace('/\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
+        // Strip style attribute (CSS expression / url(javascript:...) vectors).
+        $tag = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
+        // Strip href/src/action with javascript: or data: scheme.
+        $tag = preg_replace(
+            '/\s+(?:href|src|action|formaction)\s*=\s*(?:"(?:javascript|data)[^"]*"|\'(?:javascript|data)[^\']*\'|(?:javascript|data)[^\s>\/]*)/i',
+            '',
+            $tag,
+        ) ?? $tag;
+        return $tag;
     }
 
     private function esc(string $value): string

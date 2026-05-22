@@ -66,32 +66,40 @@ final class MarkdownParser
     /**
      * Parse a Markdown string and return an HTML5 string.
      * Any YAML front matter block is silently stripped.
+     *
+     * @param bool $allowRawHtml When true, raw HTML blocks are passed through the sanitizer
+     *                           instead of being escaped. Opt-in for XSS safety.
      */
-    public function parse(string $markdown): string
+    public function parse(string $markdown, bool $allowRawHtml = false): string
     {
         $this->guard($markdown);
         $extracted = $this->frontMatter->extract($markdown);
-        $tokens = $this->lexer->tokenize($extracted['markdown']);
-        $ast = $this->parser->parse($tokens);
+        $tokens    = $this->lexer->tokenize($extracted['markdown']);
+        $ast       = $this->parser->parse($tokens);
+        $renderer  = $allowRawHtml ? new HtmlRenderer(true) : $this->renderer;
 
-        return $this->renderer->render($ast);
+        return $renderer->render($ast);
     }
 
     /**
      * Parse a Markdown string and return both the HTML5 output and the
      * parsed front matter metadata.
      *
+     * @param bool $allowRawHtml When true, raw HTML blocks are passed through the sanitizer
+     *                           instead of being escaped. Opt-in for XSS safety.
+     *
      * @return array{html: string, meta: array<string, mixed>}
      */
-    public function parseWithMeta(string $markdown): array
+    public function parseWithMeta(string $markdown, bool $allowRawHtml = false): array
     {
         $this->guard($markdown);
         $extracted = $this->frontMatter->extract($markdown);
-        $tokens = $this->lexer->tokenize($extracted['markdown']);
-        $ast = $this->parser->parse($tokens);
+        $tokens    = $this->lexer->tokenize($extracted['markdown']);
+        $ast       = $this->parser->parse($tokens);
+        $renderer  = $allowRawHtml ? new HtmlRenderer(true) : $this->renderer;
 
         return [
-            'html' => $this->renderer->render($ast),
+            'html' => $renderer->render($ast),
             'meta' => $extracted['meta'],
         ];
     }
