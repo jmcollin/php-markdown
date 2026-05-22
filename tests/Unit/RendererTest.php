@@ -12,6 +12,7 @@ use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
 use PhpMarkdown\Node\Block\ListNode;
 use PhpMarkdown\Node\Block\ParagraphNode;
+use PhpMarkdown\Node\Block\RawHtmlBlockNode;
 use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
@@ -20,6 +21,7 @@ use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
@@ -467,5 +469,100 @@ final class RendererTest extends TestCase
             new TextNode(' more'),
         ])]);
         $this->assertSame('<p>text &lt;span&gt;word&lt;/span&gt; more</p>', $out);
+    }
+
+    // ── RawHtmlBlockNode rendering ─────────────────────────────────────────────
+
+    public function testRawHtmlBlockNodeEscapedByDefault(): void
+    {
+        // Default mode (allowRawHtml=false): block HTML content is escaped — no p-wrap.
+        $out = (new HtmlRenderer())->render(new DocumentNode([
+            new RawHtmlBlockNode('<div>x</div>'),
+        ]));
+        $this->assertSame('&lt;div&gt;x&lt;/div&gt;', $out);
+    }
+
+    public function testRawHtmlBlockNodeSanitizedWhenAllowed(): void
+    {
+        // Opt-in mode: allowlisted tag with allowlisted attribute passes through.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new RawHtmlBlockNode('<div class="box">ok</div>'),
+        ]));
+        $this->assertStringContainsString('<div class="box">ok</div>', $out);
+    }
+
+    public function testRawHtmlBlockScriptStrippedWhenAllowed(): void
+    {
+        // Opt-in mode: script tags are stripped by the sanitizer.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new RawHtmlBlockNode('<script>alert(1)</script>'),
+        ]));
+        $this->assertStringNotContainsString('<script>', $out);
+        $this->assertStringNotContainsString('alert(1)', $out);
+    }
+
+    public function testRawHtmlBlockDangerousAttributeStrippedWhenAllowed(): void
+    {
+        // Opt-in mode: dangerous event attributes are stripped, tag itself is kept.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new RawHtmlBlockNode('<div onclick="evil()">x</div>'),
+        ]));
+        $this->assertStringNotContainsString('onclick', $out);
+        $this->assertStringContainsString('<div>', $out);
+        $this->assertStringContainsString('x', $out);
+    }
+
+    public function testRawHtmlBlockNestedStripsOnlyDangerousAttrWhenAllowed(): void
+    {
+        // Opt-in mode: nested tags — only unsafe attribute is removed.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new RawHtmlBlockNode('<div><span onclick="x">y</span></div>'),
+        ]));
+        $this->assertStringNotContainsString('onclick', $out);
+        $this->assertStringContainsString('<div>', $out);
+        $this->assertStringContainsString('<span>', $out);
+        $this->assertStringContainsString('y', $out);
+    }
+
+    // ── RawHtmlInlineNode allowRawHtml mode ────────────────────────────────────
+
+    public function testRawHtmlInlineNodeVerbatimWhenAllowed(): void
+    {
+        // Opt-in mode: inline HTML is emitted verbatim (no sanitizer — avoids DOM auto-close).
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new ParagraphNode([new RawHtmlInlineNode('<span class="x">')]),
+        ]));
+        $this->assertStringContainsString('<span class="x">', $out);
+    }
+
+    public function testRawHtmlInlineNodeDangerousAttrStrippedWhenAllowed(): void
+    {
+        // Opt-in mode: on* event attributes are regex-stripped from inline HTML.
+        // Tag is preserved; only the dangerous attribute is removed.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new ParagraphNode([new RawHtmlInlineNode('<span onclick="evil()">')]),
+        ]));
+        $this->assertStringNotContainsString('onclick', $out);
+        $this->assertStringContainsString('<span', $out);
+    }
+
+    // ── HtmlEntityNode rendering ───────────────────────────────────────────────
+
+    public function testHtmlEntityNodeVerbatimByDefault(): void
+    {
+        // HtmlEntityNode is always emitted verbatim — no flag branching.
+        $out = (new HtmlRenderer())->render(new DocumentNode([
+            new ParagraphNode([new HtmlEntityNode('&amp;')]),
+        ]));
+        $this->assertSame('<p>&amp;</p>', $out);
+    }
+
+    public function testHtmlEntityNodeVerbatimWhenAllowRawHtmlEnabled(): void
+    {
+        // HtmlEntityNode verbatim behavior is unchanged in opt-in mode.
+        $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
+            new ParagraphNode([new HtmlEntityNode('&amp;')]),
+        ]));
+        $this->assertSame('<p>&amp;</p>', $out);
     }
 }
