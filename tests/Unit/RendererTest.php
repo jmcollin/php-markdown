@@ -20,6 +20,7 @@ use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
+use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
@@ -428,5 +429,43 @@ final class RendererTest extends TestCase
             new HardBreakNode(),
         ])]);
         $this->assertSame('<p><br></p>', $out);
+    }
+
+    // ── RawHtmlInlineNode rendering ────────────────────────────────────────────
+
+    public function testRawHtmlInlineNodeContentIsEscaped(): void
+    {
+        // S29 escaped-fallback contract: tag chars become HTML entities.
+        $out = $this->render([new ParagraphNode([new RawHtmlInlineNode('<span class="hi">')])]);
+        $this->assertSame('<p>&lt;span class=&quot;hi&quot;&gt;</p>', $out);
+    }
+
+    public function testRawHtmlInlineScriptNodeIsEscaped(): void
+    {
+        $out = $this->render([new ParagraphNode([new RawHtmlInlineNode('<script>evil()</script>')])]);
+        $this->assertStringNotContainsString('<script>', $out);
+        $this->assertStringContainsString('&lt;script&gt;', $out);
+    }
+
+    public function testRawHtmlInlineNodeInHeadingChildren(): void
+    {
+        $out = $this->render([new HeadingNode(1, [
+            new RawHtmlInlineNode('<sup>'),
+            new TextNode('1'),
+            new RawHtmlInlineNode('</sup>'),
+        ])]);
+        $this->assertSame('<h1>&lt;sup&gt;1&lt;/sup&gt;</h1>', $out);
+    }
+
+    public function testRawHtmlInlineNodeMixedWithText(): void
+    {
+        $out = $this->render([new ParagraphNode([
+            new TextNode('text '),
+            new RawHtmlInlineNode('<span>'),
+            new TextNode('word'),
+            new RawHtmlInlineNode('</span>'),
+            new TextNode(' more'),
+        ])]);
+        $this->assertSame('<p>text &lt;span&gt;word&lt;/span&gt; more</p>', $out);
     }
 }
