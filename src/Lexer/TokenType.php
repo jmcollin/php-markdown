@@ -17,4 +17,5 @@ enum TokenType
     case TABLE_SEPARATOR;
     case LINK_DEFINITION;
     case HTML_BLOCK;
+    case COLUMNS_CONTAINER;
 }

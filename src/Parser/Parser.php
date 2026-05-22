@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Exception\ParseException;
+use PhpMarkdown\Lexer\Lexer;
 use PhpMarkdown\Lexer\Token;
 use PhpMarkdown\Lexer\TokenType;
 use PhpMarkdown\Node\Block\BlockquoteNode;
+use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
@@ -48,6 +50,18 @@ final class Parser
     {
         ['refs' => $this->linkRefs, 'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
 
+        return new DocumentNode($this->parseBlocks($tokens));
+    }
+
+    /**
+     * Build a block-level AST from an already-filtered Token[].
+     * Uses $this->linkRefs implicitly (set by parse() before this is called).
+     *
+     * @param  Token[] $tokens
+     * @return array<int, \PhpMarkdown\Node\BlockNodeInterface>
+     */
+    private function parseBlocks(array $tokens): array
+    {
         $children = [];
         $i = 0;
         $count = count($tokens);
@@ -105,6 +119,12 @@ final class Parser
                 continue;
             }
 
+            if ($token->type === TokenType::COLUMNS_CONTAINER) {
+                $children[] = $this->buildColumns($token);
+                $i++;
+                continue;
+            }
+
             if ($token->type === TokenType::PARAGRAPH) {
                 $paraTokens = [];
                 while ($i < $count && $tokens[$i]->type === TokenType::PARAGRAPH) {
@@ -120,7 +140,43 @@ final class Parser
             $i++;
         }
 
-        return new DocumentNode($children);
+        return $children;
+    }
+
+    /**
+     * Build a ColumnsNode from a COLUMNS_CONTAINER token.
+     * Re-lexes each raw column segment and calls parseBlocks() on each result.
+     * Any nested COLUMNS_CONTAINER tokens are replaced with PARAGRAPH tokens
+     * containing the literal text ":::columns" to enforce flat-only nesting.
+     */
+    private function buildColumns(Token $token): ColumnsNode
+    {
+        $lexer = new Lexer();
+
+        $leftTokens  = $this->flattenColumnsTokens($lexer->tokenize($token->meta['left_raw']));
+        $rightTokens = $this->flattenColumnsTokens($lexer->tokenize($token->meta['right_raw']));
+
+        return new ColumnsNode(
+            leftChildren:  $this->parseBlocks($leftTokens),
+            rightChildren: $this->parseBlocks($rightTokens),
+        );
+    }
+
+    /**
+     * Replace any COLUMNS_CONTAINER tokens with PARAGRAPH tokens containing ":::columns"
+     * to enforce flat-only nesting per the story spec.
+     *
+     * @param  Token[] $tokens
+     * @return Token[]
+     */
+    private function flattenColumnsTokens(array $tokens): array
+    {
+        return array_map(
+            static fn(Token $t): Token => $t->type === TokenType::COLUMNS_CONTAINER
+                ? new Token(TokenType::PARAGRAPH, ':::columns')
+                : $t,
+            $tokens,
+        );
     }
 
     /**

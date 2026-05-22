@@ -18,6 +18,8 @@ $fixtures = [
     'blockquotes' => "> This is a quote\n\n> Another quote",
     'xss-injection' => "<script>alert(1)</script>\n\n[xss](javascript:alert(1))\n\n<b>bold attempt</b>",
     'mixed' => "# Title\n\nA paragraph with **bold** and *italic*.\n\n- item 1\n- item 2\n\n> blockquote\n\n```js\nconsole.log('hi');\n```\n\n---",
+    'columns' => ":::columns\n## Left column\n\nText with **bold** and *italic*.\n\n- item one\n- item two\n|||\n## Right column\n\nA [link](https://example.com) and `inline code`.\n:::",
+    'columns-xss' => ":::columns\n<script>alert(1)</script>\n|||\n[xss](javascript:alert(1))\n:::",
 ];
 
 foreach ($fixtures as $name => $markdown) {
