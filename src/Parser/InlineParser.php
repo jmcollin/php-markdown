@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpMarkdown\Parser;
 
+use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
@@ -32,6 +33,18 @@ final class InlineParser
     private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
     private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+    // CommonMark §6.9 — autolinks: <scheme:path> and <email>.
+    // Scheme: letter followed by 1–31 chars of [letter digit + - .], then colon.
+    // Path: any char except NUL, space, <, >.
+    // SAFETY: These checks MUST run before PATTERN_RAW_HTML_INLINE in scan() — the raw-HTML
+    // alternative [a-zA-Z][^>]*> would swallow <http://example.com> as an opening tag.
+    private const PATTERN_AUTOLINK_URL =
+        '/\G<([a-zA-Z][a-zA-Z0-9+\-.]{1,31}:[^\x00-\x20<>]*)>/';
+
+    // Email autolink: <local@domain> with CommonMark §6.9 local-part and domain rules.
+    private const PATTERN_AUTOLINK_EMAIL =
+        "/\G<([a-zA-Z0-9.!#\$%&'*+\/=?^_{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/";
+
     // CommonMark §6.6 — inline HTML tag: comment, closing tag, or opening/void tag.
     // \G anchors to current $pos offset. The s modifier allows . to span newlines in comments.
     private const PATTERN_RAW_HTML_INLINE =
@@ -305,8 +318,25 @@ final class InlineParser
                 continue;
             }
 
-            // ── Raw inline HTML: <tag>, </tag>, <!-- comment --> (§6.6) ──────
+            // ── Raw inline HTML / autolinks: <...> (§6.6 and §6.9) ─────────
             if ($char === '<') {
+                // 1. URL autolink — MUST run before PATTERN_RAW_HTML_INLINE (see constant comment).
+                if (preg_match(self::PATTERN_AUTOLINK_URL, $text, $m, 0, $pos)) {
+                    $nodes = $this->flushBuffer($buffer, $nodes);
+                    $buffer = '';
+                    $nodes[] = new AutolinkNode($m[1], false);
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+                // 2. Email autolink.
+                if (preg_match(self::PATTERN_AUTOLINK_EMAIL, $text, $m, 0, $pos)) {
+                    $nodes = $this->flushBuffer($buffer, $nodes);
+                    $buffer = '';
+                    $nodes[] = new AutolinkNode($m[1], true);
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+                // 3. Raw inline HTML (§6.6) — existing logic unchanged.
                 if (preg_match(self::PATTERN_RAW_HTML_INLINE, $text, $m, 0, $pos)) {
                     $nodes = $this->flushBuffer($buffer, $nodes);
                     $buffer = '';
