@@ -365,9 +365,10 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_HEADING, $line, $m)) {
+            $content = (string) preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2]));
             return new Token(
                 TokenType::HEADING,
-                trim($m[2]),
+                $content,
                 ['level' => strlen($m[1])],
             );
         }
