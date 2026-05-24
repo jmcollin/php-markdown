@@ -14,7 +14,6 @@ final readonly class ListItemNode implements BlockNodeInterface
     public function __construct(
         /** @var \PhpMarkdown\Node\NodeInterface[] */
         public array $children = [],
-        public bool $loose = false,
         public ?bool $checked = null,
     ) {
     }

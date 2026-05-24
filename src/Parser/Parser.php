@@ -261,18 +261,6 @@ final class Parser
             $items[] = new ListItemNode(children: $nodeChildren, checked: $itemToken->meta['checked'] ?? null);
         }
 
-        // Propagate loose to all items now that the final value is known.
-        if ($loose) {
-            $items = array_map(
-                static fn(ListItemNode $item) => new ListItemNode(
-                    children: $item->children,
-                    loose:    true,
-                    checked:  $item->checked,
-                ),
-                $items,
-            );
-        }
-
         return new ListNode(ordered: $ordered, loose: $loose, children: $items);
     }
 

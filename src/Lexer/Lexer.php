@@ -280,8 +280,7 @@ final class Lexer
             // Start new indented code block (only when no paragraph was active,
             // and only when the line is not a list item — list items with leading spaces
             // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
-            if (!$inIndentedBlock
-                && !$hadPendingToken
+            if (!$hadPendingToken
                 && preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
                 && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
                 && !preg_match(self::PATTERN_ORDERED_LIST, $line)
