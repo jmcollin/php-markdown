@@ -107,17 +107,56 @@ final class HtmlRenderer
 
     private function renderList(ListNode $node): string
     {
-        $tag = $node->ordered ? 'ol' : 'ul';
-        return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+        $tag   = $node->ordered ? 'ol' : 'ul';
+        $inner = '';
+        foreach ($node->children as $item) {
+            $inner .= $this->renderListItem($item, $node->loose);
+        }
+        return '<' . $tag . '>' . $inner . '</' . $tag . '>';
     }
 
-    private function renderListItem(ListItemNode $node): string
+    private function renderListItem(ListItemNode $node, bool $loose = false): string
     {
+        $content = $this->renderListItemContent($node->children, $loose);
+
         if ($node->checked === null) {
-            return '<li>' . $this->renderChildren($node->children) . '</li>';
+            return '<li>' . $content . '</li>';
         }
         $checkbox = '<input type="checkbox" disabled' . ($node->checked ? ' checked' : '') . '>';
-        return '<li>' . $checkbox . ' ' . $this->renderChildren($node->children) . '</li>';
+        return '<li>' . $checkbox . ' ' . $content . '</li>';
+    }
+
+    /**
+     * @param \PhpMarkdown\Node\NodeInterface[] $children
+     */
+    private function renderListItemContent(array $children, bool $loose): string
+    {
+        if (!$loose) {
+            return $this->renderChildren($children);
+        }
+
+        $inlinePart = [];
+        $blockPart  = [];
+        $hitBlock   = false;
+        foreach ($children as $child) {
+            if (!$hitBlock && $child instanceof ListNode) {
+                $hitBlock = true;
+            }
+            if ($hitBlock) {
+                $blockPart[] = $child;
+            } else {
+                $inlinePart[] = $child;
+            }
+        }
+
+        $html = '';
+        if ($inlinePart !== []) {
+            $html .= '<p>' . $this->renderChildren($inlinePart) . '</p>';
+        }
+        foreach ($blockPart as $block) {
+            $html .= $this->renderNode($block);
+        }
+        return $html;
     }
 
     /**
