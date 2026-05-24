@@ -19,6 +19,7 @@ use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
 
+use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
@@ -87,6 +88,7 @@ final class HtmlRenderer
                 $this->allowRawHtml
                     ? $this->stripInlineAttrs($node->content)
                     : $this->esc($node->content),
+            $node instanceof AutolinkNode      => $this->renderAutolink($node),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
@@ -196,6 +198,15 @@ final class HtmlRenderer
             ? ' title="' . $this->esc($node->title) . '"'
             : '';
         return '<img src="' . $this->esc($node->src) . '" alt="' . $this->esc($node->alt) . '"' . $titleAttr . '>';
+    }
+
+    private function renderAutolink(AutolinkNode $node): string
+    {
+        $href = $node->isEmail
+            ? 'mailto:' . $this->esc($node->url)
+            : $this->esc($node->url);
+        $text = $this->esc($node->url);
+        return "<a href=\"{$href}\">{$text}</a>";
     }
 
     private function renderTable(TableNode $node): string
