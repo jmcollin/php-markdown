@@ -12,6 +12,7 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
@@ -88,6 +89,12 @@ final class Parser
                     content: $token->content,
                     language: $token->meta['language'] ?? '',
                 );
+                $i++;
+                continue;
+            }
+
+            if ($token->type === TokenType::INDENTED_CODE) {
+                $children[] = new IndentedCodeNode(content: $token->content);
                 $i++;
                 continue;
             }

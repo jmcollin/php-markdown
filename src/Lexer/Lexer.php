@@ -27,6 +27,7 @@ final class Lexer
     private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
     private const PATTERN_COLUMNS_CLOSE    = '/^:::$/';
     private const PATTERN_COLUMNS_SEP      = '/^\|\|\|$/';
+    private const PATTERN_INDENTED_CODE    = '/^(    |\t)(.*)/s';
 
     /**
      * Block-level HTML tags that trigger HTML_BLOCK detection (CommonMark §4.6).
@@ -88,6 +89,10 @@ final class Lexer
         $columnsSepFound   = false;
         $columnsLeftLines  = [];
         $columnsRightLines = [];
+
+        $inIndentedBlock = false;
+        $indentedLines   = [];
+        $pendingBlanks   = [];
 
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
@@ -228,6 +233,9 @@ final class Lexer
                 continue;
             }
 
+            // Capture paragraph-active state before setext promotion may clear it.
+            $hadPendingToken = $pendingToken !== null;
+
             // Setext heading detection: a pending text line followed by === or ---
             if ($pendingToken !== null) {
                 if (preg_match(self::PATTERN_SETEXT_H1, $line)) {
@@ -242,6 +250,46 @@ final class Lexer
                 }
                 $tokens[] = $pendingToken;
                 $pendingToken = null;
+            }
+
+            // Indented code block drain (continuation).
+            if ($inIndentedBlock) {
+                if (preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                    && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+                    && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+                ) {
+                    $indentedLines = [...$indentedLines, ...$pendingBlanks, $m[2]];
+                    $pendingBlanks = [];
+                    continue;
+                }
+                if ($line === '' || ctype_space($line)) {
+                    $pendingBlanks[] = '';
+                    continue;
+                }
+                // Non-indented, non-blank: close block.
+                $tokens[] = new Token(
+                    TokenType::INDENTED_CODE,
+                    implode("\n", $indentedLines) . "\n",
+                );
+                $inIndentedBlock = false;
+                $indentedLines   = [];
+                $pendingBlanks   = [];
+                // Fall through to process current line normally.
+            }
+
+            // Start new indented code block (only when no paragraph was active,
+            // and only when the line is not a list item — list items with leading spaces
+            // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
+            if (!$inIndentedBlock
+                && !$hadPendingToken
+                && preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+                && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+            ) {
+                $inIndentedBlock = true;
+                $indentedLines   = [$m[2]];
+                $pendingBlanks   = [];
+                continue;
             }
 
             $token = $this->matchLine($line);
@@ -271,6 +319,14 @@ final class Lexer
                 TokenType::FENCED_CODE,
                 implode("\n", $fencedLines),
                 ['language' => $fencedLanguage],
+            );
+        }
+
+        // Unclosed indented code block — emit what was collected
+        if ($inIndentedBlock && $indentedLines !== []) {
+            $tokens[] = new Token(
+                TokenType::INDENTED_CODE,
+                implode("\n", $indentedLines) . "\n",
             );
         }
 
