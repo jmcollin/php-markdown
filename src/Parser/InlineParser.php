@@ -104,7 +104,24 @@ final class InlineParser
                 if ($closePos !== false) {
                     $tokens = $this->flushBuffer($buffer, $tokens);
                     $buffer = '';
-                    $tokens[] = new CodeNode(trim(substr($text, $tmp, $closePos - $tmp)));
+                    $raw = substr($text, $tmp, $closePos - $tmp);
+                    // CommonMark §6.1 — three-step normalisation
+                    // Step 1: replace line endings with single space
+                    $content = str_replace(["\r\n", "\r", "\n"], ' ', $raw);
+                    // Step 1b: all-spaces content collapses to a single space
+                    if (strlen($content) > 0 && ltrim($content) === '') {
+                        $content = ' ';
+                    }
+                    // Step 2: if not all-spaces AND starts+ends with space, strip one each side
+                    if (
+                        strlen($content) > 0
+                        && $content[0] === ' '
+                        && $content[strlen($content) - 1] === ' '
+                        && ltrim($content) !== ''
+                    ) {
+                        $content = substr($content, 1, strlen($content) - 2);
+                    }
+                    $tokens[] = new CodeNode($content);
                     $pos = $closePos + $btCount;
                     continue;
                 }
