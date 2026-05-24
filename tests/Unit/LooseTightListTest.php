@@ -223,11 +223,6 @@ final class LooseTightListTest extends TestCase
 
         $this->assertInstanceOf(ListNode::class, $list);
         $this->assertTrue($list->loose);
-
-        foreach ($list->children as $item) {
-            $this->assertInstanceOf(ListItemNode::class, $item);
-            $this->assertTrue($item->loose, 'Each ListItemNode must have loose=true');
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -238,7 +233,6 @@ final class LooseTightListTest extends TestCase
     {
         $item = new ListItemNode(
             children: [new TextNode('hello')],
-            loose:    true,
         );
         $list = new ListNode(ordered: false, loose: true, children: [$item]);
         $doc  = new \PhpMarkdown\Node\Block\DocumentNode([$list]);
@@ -256,7 +250,6 @@ final class LooseTightListTest extends TestCase
     {
         $item = new ListItemNode(
             children: [new TextNode('world')],
-            loose:    false,
         );
         $list = new ListNode(ordered: false, loose: false, children: [$item]);
         $doc  = new \PhpMarkdown\Node\Block\DocumentNode([$list]);
