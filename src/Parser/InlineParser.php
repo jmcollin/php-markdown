@@ -27,6 +27,19 @@ final class InlineParser
     /** Maximum nesting depth for recursive inline parsing (prevents stack overflow). */
     private const MAX_DEPTH = 64;
 
+    /**
+     * All 32 ASCII punctuation characters that may be backslash-escaped per CommonMark §2.4.
+     * Membership test uses str_contains — no regex on the hot path.
+     *
+     * Note: \<newline> (hard line break) is intentionally NOT handled here.
+     * The Lexer (Lexer.php lines 384–391) detects an odd number of trailing backslashes,
+     * strips the final one, and sets meta['hard_break' => true] on the PARAGRAPH token.
+     * By the time inline text reaches InlineParser::scan(), the \<newline> sequence has
+     * already been consumed and removed. Adding \n here would be a no-op in normal flow
+     * and would mishandle mid-paragraph \<newline> sequences that the Lexer did not strip.
+     */
+    private const ESCAPABLE_CHARS = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
+
     // Patterns use \G + offset param instead of substr() to avoid O(n²) string copies.
     // URL capture class excludes < > to block <javascript:...> autolink-style bypass.
     private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
@@ -78,6 +91,15 @@ final class InlineParser
 
         while ($pos < $len) {
             $char = $text[$pos];
+
+            // ── Backslash escape: \X where X is ASCII punctuation (CommonMark §2.4) ─
+            // This branch MUST remain first in the loop — before backtick, &, [, *, _, ~, <.
+            // An escaped backtick must suppress code-span opening; an escaped [ must suppress
+            // link parsing. Any branch above this one would silently break those invariants.
+            if ($char === '\\') {
+                $pos = $this->parseBackslashEscape($text, $pos, $len, $buffer, $nodes);
+                continue;
+            }
 
             // ── Inline code: `code` or ``code`` ──────────────────────────────
             if ($char === '`') {
@@ -322,6 +344,48 @@ final class InlineParser
         }
 
         return $this->flushBuffer($buffer, $nodes);
+    }
+
+    /**
+     * Processes a backslash at $pos and returns the new cursor position.
+     *
+     * Three paths (CommonMark §2.4):
+     *   1. $next is in ESCAPABLE_CHARS  → flush buffer, emit TextNode($next), advance 2.
+     *   2. $next is not in ESCAPABLE_CHARS → append '\' to buffer, advance 1 (next char
+     *      is processed normally on the following iteration).
+     *   3. No following character (end of string) → append '\' to buffer, advance 1.
+     *
+     * $buffer and $nodes are passed by reference to match the mutation pattern used by
+     * every other branch in scan().
+     *
+     * @param InlineNodeInterface[] $nodes
+     */
+    private function parseBackslashEscape(
+        string $text,
+        int    $pos,
+        int    $len,
+        string &$buffer,
+        array  &$nodes,
+    ): int {
+        // No character follows the backslash — treat it as a literal backslash.
+        if ($pos + 1 >= $len) {
+            $buffer .= '\\';
+            return $pos + 1;
+        }
+
+        $next = $text[$pos + 1];
+
+        if (str_contains(self::ESCAPABLE_CHARS, $next)) {
+            // Valid escape: flush any preceding text, then emit the literal punctuation.
+            $nodes  = $this->flushBuffer($buffer, $nodes);
+            $buffer = '';
+            $nodes[] = new TextNode($next);
+            return $pos + 2;
+        }
+
+        // Non-escapable character: the backslash is literal; $next is processed next iteration.
+        $buffer .= '\\';
+        return $pos + 1;
     }
 
     /**
