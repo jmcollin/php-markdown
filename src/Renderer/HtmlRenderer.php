@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
@@ -60,6 +61,7 @@ final class HtmlRenderer
             $node instanceof ListNode         => $this->renderList($node),
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
+            $node instanceof IndentedCodeNode => '<pre><code>' . $this->esc($node->content) . '</code></pre>',
             $node instanceof HorizontalRuleNode => '<hr>',
             $node instanceof ColumnsNode       => $this->renderColumns($node),
             // Raw HTML blocks: sanitize if allowRawHtml, else escape (XSS-safe default).
