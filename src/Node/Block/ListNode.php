@@ -13,6 +13,7 @@ final readonly class ListNode implements BlockNodeInterface
 {
     public function __construct(
         public bool $ordered,
+        public bool $loose = false,
         /** @var ListItemNode[] */
         public array $children = [],
     ) {

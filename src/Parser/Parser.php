@@ -220,6 +220,7 @@ final class Parser
         $count   = count($tokens);
         $ordered = $tokens[$i]->meta['ordered'];
         $items   = [];
+        $loose   = false;
 
         while ($i < $count
             && $tokens[$i]->type === TokenType::LIST_ITEM
@@ -241,10 +242,38 @@ final class Parser
                 $nodeChildren = [...$inlineChildren, $subList];
             }
 
+            // Peek ahead for blank tokens. Consume only when the token after the blank run
+            // is a LIST_ITEM at the same depth and ordered value (inter-item blanks).
+            $j = $i;
+            while ($j < $count && $tokens[$j]->type === TokenType::BLANK) {
+                $j++;
+            }
+            if ($j > $i
+                && $j < $count
+                && $tokens[$j]->type === TokenType::LIST_ITEM
+                && $tokens[$j]->meta['depth'] === $depth
+                && $tokens[$j]->meta['ordered'] === $ordered
+            ) {
+                $i     = $j;
+                $loose = true;
+            }
+
             $items[] = new ListItemNode(children: $nodeChildren, checked: $itemToken->meta['checked'] ?? null);
         }
 
-        return new ListNode(ordered: $ordered, children: $items);
+        // Propagate loose to all items now that the final value is known.
+        if ($loose) {
+            $items = array_map(
+                static fn(ListItemNode $item) => new ListItemNode(
+                    children: $item->children,
+                    loose:    true,
+                    checked:  $item->checked,
+                ),
+                $items,
+            );
+        }
+
+        return new ListNode(ordered: $ordered, loose: $loose, children: $items);
     }
 
     /**
