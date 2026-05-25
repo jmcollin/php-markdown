@@ -13,8 +13,7 @@ namespace PhpMarkdown\Lexer;
 final class Lexer
 {
     private const PATTERN_HEADING           = '/^(#{1,6})\s+(.+)$/';
-    private const PATTERN_FENCED_OPEN      = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
-    private const PATTERN_FENCED_CLOSE     = '/^`{3,}$/';
+    private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
@@ -79,6 +78,8 @@ final class Lexer
         $inFencedBlock = false;
         $fencedLanguage = '';
         $fencedLines = [];
+        $fenceChar = '';
+        $fenceLength = 0;
         $pendingToken = null;
 
         $inHtmlBlock = false;
@@ -178,7 +179,7 @@ final class Lexer
             }
 
             if ($inFencedBlock) {
-                if (preg_match(self::PATTERN_FENCED_CLOSE, $line)) {
+                if (preg_match('/^ {0,3}' . preg_quote($fenceChar, '/') . '{' . $fenceLength . ',}\s*$/', $line)) {
                     if ($pendingToken !== null) {
                         $tokens[] = $pendingToken;
                         $pendingToken = null;
@@ -188,9 +189,11 @@ final class Lexer
                         implode("\n", $fencedLines),
                         ['language' => $fencedLanguage],
                     );
-                    $inFencedBlock = false;
+                    $inFencedBlock  = false;
                     $fencedLanguage = '';
-                    $fencedLines = [];
+                    $fencedLines    = [];
+                    $fenceChar      = '';
+                    $fenceLength    = 0;
                 } else {
                     $fencedLines[] = $line;
                 }
@@ -202,9 +205,11 @@ final class Lexer
                     $tokens[] = $pendingToken;
                     $pendingToken = null;
                 }
-                $inFencedBlock = true;
+                $inFencedBlock  = true;
                 $fencedLanguage = $m[2];
-                $fencedLines = [];
+                $fencedLines    = [];
+                $fenceChar      = $m[1][0];
+                $fenceLength    = strlen($m[1]);
                 continue;
             }
 
@@ -319,6 +324,11 @@ final class Lexer
                 implode("\n", $fencedLines),
                 ['language' => $fencedLanguage],
             );
+            $inFencedBlock  = false;
+            $fencedLanguage = '';
+            $fencedLines    = [];
+            $fenceChar      = '';
+            $fenceLength    = 0;
         }
 
         // Unclosed indented code block — emit what was collected
