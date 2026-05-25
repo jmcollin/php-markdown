@@ -62,6 +62,7 @@ final class HtmlSanitizerXssTest extends TestCase
         $imgs = $dom->getElementsByTagName('img');
         $img  = $imgs->item(0);
         $this->assertNotNull($img, 'img element must be present in sanitized output');
+        $this->assertInstanceOf(\DOMElement::class, $img, 'img must be a DOMElement');
         $this->assertFalse($img->hasAttribute('onerror'), 'onerror must not be a DOM attribute');
     }
 

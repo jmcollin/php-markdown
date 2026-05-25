@@ -118,6 +118,8 @@ final class InlineParserEntityTest extends TestCase
     public function testEntityAtEndOfInput(): void
     {
         $nodes = $this->parser->parse('text &amp;');
+        $this->assertNotEmpty($nodes);
+        assert(!empty($nodes));
 
         $last = $nodes[array_key_last($nodes)];
         $this->assertInstanceOf(HtmlEntityNode::class, $last);

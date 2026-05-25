@@ -42,14 +42,15 @@ final class MarkdownParserTest extends TestCase
         $dir = __DIR__ . '/fixtures';
         $fixtures = [];
 
-        foreach (glob($dir . '/*.md') as $mdFile) {
+        $mdFiles = glob($dir . '/*.md');
+        foreach ($mdFiles !== false ? $mdFiles : [] as $mdFile) {
             $name = basename($mdFile, '.md');
             $htmlFile = $dir . '/' . $name . '.html';
 
             if (file_exists($htmlFile)) {
                 $fixtures[$name] = [
-                    file_get_contents($mdFile),
-                    file_get_contents($htmlFile),
+                    (string) file_get_contents($mdFile),
+                    (string) file_get_contents($htmlFile),
                 ];
             }
         }
@@ -172,6 +173,7 @@ final class MarkdownParserTest extends TestCase
 
         $this->parser->parse($original);
 
+        /** @psalm-suppress RedundantCondition */
         $this->assertSame($snapshot, $original);
     }
 
@@ -182,6 +184,7 @@ final class MarkdownParserTest extends TestCase
 
         $this->parser->parseWithMeta($original);
 
+        /** @psalm-suppress RedundantCondition */
         $this->assertSame($snapshot, $original);
     }
 

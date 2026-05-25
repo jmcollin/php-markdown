@@ -7,5 +7,22 @@
 >
     <projectFiles>
         <directory name="src" />
+        <directory name="tests" />
+        <ignoreFiles>
+            <file name="tests/inline_parser_smoke.php" />
+        </ignoreFiles>
     </projectFiles>
+
+    <issueHandlers>
+        <UnusedClass>
+            <errorLevel type="suppress">
+                <directory name="tests" />
+            </errorLevel>
+        </UnusedClass>
+        <PropertyNotSetInConstructor>
+            <errorLevel type="suppress">
+                <directory name="tests" />
+            </errorLevel>
+        </PropertyNotSetInConstructor>
+    </issueHandlers>
 </psalm>

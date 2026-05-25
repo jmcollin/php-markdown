@@ -174,6 +174,9 @@ final class HtmlSanitizer
     private function sanitizeAttributes(\DOMElement $el): void
     {
         // Collect phase — snapshot attribute nodes before any mutation
+        if ($el->attributes === null) {
+            return;
+        }
         $attrs = iterator_to_array($el->attributes);
 
         foreach ($attrs as $attrNode) {
@@ -222,7 +225,7 @@ final class HtmlSanitizer
         // Post-loop pass — noopener injection (runs after all attribute removals)
         if ($el->hasAttribute('target') && $el->getAttribute('target') === '_blank') {
             $existing = $el->getAttribute('rel');
-            $tokens   = $existing !== '' ? preg_split('/\s+/', trim($existing)) : [];
+            $tokens   = $existing !== '' ? (preg_split('/\s+/', trim($existing)) ?: []) : [];
             if (!in_array('noopener', array_map('strtolower', $tokens), true)) {
                 $tokens[] = 'noopener';
             }
