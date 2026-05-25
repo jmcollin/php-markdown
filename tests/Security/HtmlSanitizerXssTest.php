@@ -138,7 +138,6 @@ final class HtmlSanitizerXssTest extends TestCase
         $result  = $this->sanitizer->sanitize($input);
         $elapsed = (hrtime(true) - $start) / 1_000_000; // ms
 
-        $this->assertIsString($result);
         $this->assertStringContainsString('text', $result);
         $this->assertStringContainsString('title=', $result);
         $this->assertLessThan(2000, $elapsed, 'Sanitizer must complete within 2 seconds on long safe attrs');
@@ -154,7 +153,6 @@ final class HtmlSanitizerXssTest extends TestCase
 
         $result = $this->sanitizer->sanitize($html);
 
-        $this->assertIsString($result);
         $this->assertStringNotContainsString('Fatal', $result);
         $this->assertStringContainsString('<div>', $result);
         $this->assertStringContainsString('text', $result);

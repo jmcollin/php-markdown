@@ -30,6 +30,7 @@ final class IndentedCodeBlockTest extends TestCase
         );
     }
 
+    /** @return \PhpMarkdown\Lexer\Token[] */
     private function tokenize(string $markdown): array
     {
         return $this->lexer->tokenize($markdown);

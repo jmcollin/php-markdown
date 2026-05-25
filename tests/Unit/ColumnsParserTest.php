@@ -24,6 +24,7 @@ final class ColumnsParserTest extends TestCase
         $this->parser = new Parser();
     }
 
+    /** @return \PhpMarkdown\Node\NodeInterface[] */
     private function parse(string $markdown): array
     {
         return $this->parser->parse($this->lexer->tokenize($markdown))->children;

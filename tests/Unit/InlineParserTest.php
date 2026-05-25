@@ -55,7 +55,9 @@ final class InlineParserTest extends TestCase
         $nodes = $this->parser->parse('*italic*');
 
         $this->assertInstanceOf(EmphasisNode::class, $nodes[0]);
-        $this->assertSame('italic', $nodes[0]->children[0]->text);
+        $inner = $nodes[0]->children[0];
+        $this->assertInstanceOf(TextNode::class, $inner);
+        $this->assertSame('italic', $inner->text);
     }
 
     public function testItalicUnderscores(): void
@@ -249,8 +251,11 @@ final class InlineParserTest extends TestCase
 
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(StrikethroughNode::class, $nodes[0]);
-        $this->assertInstanceOf(StrongNode::class, $nodes[0]->children[0]);
-        $this->assertSame('bold', $nodes[0]->children[0]->children[0]->text);
+        $strong = $nodes[0]->children[0];
+        $this->assertInstanceOf(StrongNode::class, $strong);
+        $boldInner = $strong->children[0];
+        $this->assertInstanceOf(TextNode::class, $boldInner);
+        $this->assertSame('bold', $boldInner->text);
     }
 
     public function testStrikethroughMixedSurroundingText(): void
@@ -261,7 +266,9 @@ final class InlineParserTest extends TestCase
         $this->assertInstanceOf(TextNode::class, $nodes[0]);
         $this->assertSame('foo ', $nodes[0]->text);
         $this->assertInstanceOf(StrikethroughNode::class, $nodes[1]);
-        $this->assertSame('bar', $nodes[1]->children[0]->text);
+        $barInner = $nodes[1]->children[0];
+        $this->assertInstanceOf(TextNode::class, $barInner);
+        $this->assertSame('bar', $barInner->text);
         $this->assertInstanceOf(TextNode::class, $nodes[2]);
         $this->assertSame(' baz', $nodes[2]->text);
     }
@@ -273,11 +280,15 @@ final class InlineParserTest extends TestCase
 
         $this->assertCount(3, $nodes);
         $this->assertInstanceOf(StrikethroughNode::class, $nodes[0]);
-        $this->assertSame('a ', $nodes[0]->children[0]->text);
+        $aInner = $nodes[0]->children[0];
+        $this->assertInstanceOf(TextNode::class, $aInner);
+        $this->assertSame('a ', $aInner->text);
         $this->assertInstanceOf(TextNode::class, $nodes[1]);
         $this->assertSame('b', $nodes[1]->text);
         $this->assertInstanceOf(StrikethroughNode::class, $nodes[2]);
-        $this->assertSame(' c', $nodes[2]->children[0]->text);
+        $cInner = $nodes[2]->children[0];
+        $this->assertInstanceOf(TextNode::class, $cInner);
+        $this->assertSame(' c', $cInner->text);
     }
 
     public function testDepthLimitDoesNotCrash(): void
@@ -343,7 +354,9 @@ final class InlineParserTest extends TestCase
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(LinkNode::class, $nodes[0]);
         $this->assertSame('https://example.com', $nodes[0]->href);
-        $this->assertSame('foo', $nodes[0]->children[0]->text);
+        $fooInner = $nodes[0]->children[0];
+        $this->assertInstanceOf(TextNode::class, $fooInner);
+        $this->assertSame('foo', $fooInner->text);
     }
 
     public function testShortcutReferenceLink(): void

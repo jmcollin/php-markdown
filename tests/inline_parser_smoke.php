@@ -31,11 +31,13 @@ function check(bool $cond, string $label): void
 // AC1: Bold
 $n = $p->parse('**hello**');
 check(count($n) === 1 && $n[0] instanceof StrongNode, 'AC1: bold -> StrongNode');
+// @phpstan-ignore-next-line property.notFound
 check($n[0]->children[0] instanceof TextNode && $n[0]->children[0]->text === 'hello', 'AC1: inner TextNode "hello"');
 
 // AC2: Italic *
 $n = $p->parse('*world*');
 check(count($n) === 1 && $n[0] instanceof EmphasisNode, 'AC2: *italic* -> EmphasisNode');
+// @phpstan-ignore-next-line property.notFound
 check($n[0]->children[0]->text === 'world', 'AC2: inner text "world"');
 
 // AC2b: Italic _
@@ -45,12 +47,15 @@ check(count($n) === 1 && $n[0] instanceof EmphasisNode, 'AC2b: _italic_ -> Empha
 // AC3: Link
 $n = $p->parse('[Claude](https://claude.ai)');
 check(count($n) === 1 && $n[0] instanceof LinkNode, 'AC3: link -> LinkNode');
+// @phpstan-ignore-next-line property.notFound
 check($n[0]->href === 'https://claude.ai', 'AC3: href correct');
+// @phpstan-ignore-next-line property.notFound
 check($n[0]->children[0] instanceof TextNode && $n[0]->children[0]->text === 'Claude', 'AC3: link text');
 
 // AC4: Image
 $n = $p->parse('![alt text](img.png)');
 check(count($n) === 1 && $n[0] instanceof ImageNode, 'AC4: image -> ImageNode');
+// @phpstan-ignore-next-line property.notFound
 check($n[0]->src === 'img.png' && $n[0]->alt === 'alt text', 'AC4: src/alt correct');
 
 // AC5: Inline code
@@ -92,6 +97,7 @@ check($n[0] instanceof TextNode, 'Security: data: href -> TextNode literal');
 // Edge: nested emphasis inside strong
 $n = $p->parse('**bold _italic_ bold**');
 check($n[0] instanceof StrongNode, 'Edge: nested -> StrongNode outer');
+// @phpstan-ignore-next-line property.notFound
 $inner = $n[0]->children;
 check($inner[0] instanceof TextNode && $inner[0]->text === 'bold ', 'Edge: nested -> TextNode "bold "');
 check($inner[1] instanceof EmphasisNode, 'Edge: nested -> EmphasisNode inner');
@@ -110,4 +116,5 @@ $n = $p->parse('[page](/about)');
 check($n[0] instanceof LinkNode, 'Security: relative URL allowed');
 
 echo PHP_EOL . "Results: {$ok} OK, {$fail} FAIL" . PHP_EOL;
+// @phpstan-ignore-next-line greater.alwaysFalse
 exit($fail > 0 ? 1 : 0);

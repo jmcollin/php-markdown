@@ -20,6 +20,7 @@ final class RendererEntityTest extends TestCase
         $this->renderer = new HtmlRenderer();
     }
 
+    /** @param \PhpMarkdown\Node\NodeInterface[] $children */
     private function render(array $children): string
     {
         return $this->renderer->render(new DocumentNode($children));
