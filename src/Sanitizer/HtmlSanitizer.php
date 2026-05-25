@@ -174,6 +174,7 @@ final class HtmlSanitizer
     private function sanitizeAttributes(\DOMElement $el): void
     {
         // Collect phase — snapshot attribute nodes before any mutation
+        // @phpstan-ignore identical.alwaysFalse
         if ($el->attributes === null) {
             return;
         }

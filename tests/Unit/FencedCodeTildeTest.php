@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PhpMarkdown\Tests\Unit;
 
 use PhpMarkdown\Lexer\Lexer;
+use PhpMarkdown\Lexer\Token;
 use PhpMarkdown\Lexer\TokenType;
 use PhpMarkdown\Parser\Parser;
 use PhpMarkdown\Renderer\HtmlRenderer;
@@ -30,6 +31,7 @@ final class FencedCodeTildeTest extends TestCase
         );
     }
 
+    /** @return Token[] */
     private function tokenize(string $markdown): array
     {
         return $this->lexer->tokenize($markdown);
