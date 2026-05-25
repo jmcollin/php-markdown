@@ -50,6 +50,7 @@ final class Lexer
      *
      * Capture group 1: the stripped line content.
      */
+    /** @var non-empty-string */
     private readonly string $patternHtmlBlockStart;
 
     public function __construct()
