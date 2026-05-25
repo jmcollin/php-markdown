@@ -27,9 +27,21 @@ final class InlineParser
     private const MAX_DEPTH = 64;
 
     // Patterns use \G + offset param instead of substr() to avoid O(n²) string copies.
-    // URL capture class excludes < > to block <javascript:...> autolink-style bypass.
-    private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
-    private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\s]+)(?:\s+"([^"]*)")?\)/';
+    // URL capture class excludes < > " ' to block <javascript:...> autolink-style bypass and
+    // prevent url'title' (no space) absorbing the single-quote title delimiter into the URL.
+    // Title group supports three CommonMark §6.6 delimiters: "...", '...', (...).
+    // Capture groups: [1]=text/alt, [2]=url, [3]=dq-title, [4]=sq-title, [5]=paren-title.
+    // Single-quote body: (?:[^'\\]|\\.)*  — escape-aware, allows \' inside.
+    // Paren body: (?:[^()\\]|\\.)*  — blocks unescaped ( and ) so (bad(title) is invalid (AC-10).
+    // \s* before final ) tolerates optional trailing spaces (EDGE-2).
+    private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\'\\s]+)(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
+    private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\'\\s]+)(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
+    // Angle-bracket URL variants: [text](<url with spaces>) and ![alt](<src>).
+    // URL group allows spaces and most chars; blocks literal < > and newlines; \\ . handles escapes.
+    // Title group: same three-delimiter form as plain patterns (groups 3/4/5).
+    // \s* before final ) tolerates optional trailing spaces (EDGE-2).
+    private const PATTERN_IMAGE_ANGLE = '/\G!\[([^\]]*)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
+    private const PATTERN_LINK_ANGLE  = '/\G\[([^\]]+)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
     private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
     // CommonMark §6.9 — autolinks: <scheme:path> and <email>.
     // Scheme: letter followed by 1–31 chars of [letter digit + - .], then colon.
@@ -192,14 +204,33 @@ final class InlineParser
 
             // ── Image: ![alt](src "title"?) ───────────────────────────────────
             if ($char === '!' && ($pos + 1) < $len && $text[$pos + 1] === '[') {
+                // Angle-bracket URL form: ![alt](<src> or <src "title">) — checked first.
+                if (preg_match(self::PATTERN_IMAGE_ANGLE, $text, $m, 0, $pos)) {
+                    $tokens = $this->flushBuffer($buffer, $tokens);
+                    $buffer = '';
+                    $src = stripslashes($m[2]);
+                    if ($this->isSafeAngleBracketUrl($src)) {
+                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
+                        $tokens[] = new ImageNode(
+                            src: $src,
+                            alt: $m[1],
+                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
+                        );
+                    } else {
+                        $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
+                    }
+                    $pos += strlen($m[0]);
+                    continue;
+                }
                 if (preg_match(self::PATTERN_IMAGE, $text, $m, 0, $pos)) {
                     $tokens = $this->flushBuffer($buffer, $tokens);
                     $buffer = '';
                     if ($this->isSafeUrl($m[2])) {
+                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
                         $tokens[] = new ImageNode(
                             src: $m[2],
                             alt: $m[1],
-                            title: isset($m[3]) && $m[3] !== '' ? $m[3] : null,
+                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
                         );
                     } else {
                         $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
@@ -211,17 +242,36 @@ final class InlineParser
 
             // ── Link: [text](url "title"?) and reference links ───────────────
             if ($char === '[') {
-                // 1. Inline link — highest priority (CommonMark spec §6.3)
+                // 1a. Angle-bracket URL form: [text](<url> or <url "title">) — checked first.
+                if (preg_match(self::PATTERN_LINK_ANGLE, $text, $m, 0, $pos)) {
+                    $tokens = $this->flushBuffer($buffer, $tokens);
+                    $buffer = '';
+                    $href = stripslashes($m[2]);
+                    if ($this->isSafeAngleBracketUrl($href)) {
+                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
+                        $tokens[] = new LinkNode(
+                            href: $href,
+                            children: $this->scan($m[1], $depth + 1),
+                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
+                        );
+                    } else {
+                        $buffer .= $m[0]; // Unsafe URL: render as literal text (XSS prevention)
+                    }
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+
+                // 1b. Inline link — highest priority (CommonMark spec §6.3)
                 if (preg_match(self::PATTERN_LINK, $text, $m, 0, $pos)) {
                     $tokens = $this->flushBuffer($buffer, $tokens);
                     $buffer = '';
                     $href = $m[2];
                     if ($this->isSafeUrl($href)) {
-                        $title = isset($m[3]) && $m[3] !== '' ? $m[3] : null;
+                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
                         $tokens[] = new LinkNode(
                             href: $href,
                             children: $this->scan($m[1], $depth + 1),
-                            title: $title,
+                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
                         );
                     } else {
                         $buffer .= $m[0]; // Unsafe URL: render as literal text (XSS prevention)
@@ -374,6 +424,33 @@ final class InlineParser
         }
         // parse_url() returning false means malformed URL — reject rather than allow.
         $parts = parse_url($url);
+        if ($parts === false) {
+            return false;
+        }
+        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
+        return in_array($scheme, self::SAFE_SCHEMES, true);
+    }
+
+    /**
+     * Safety check for angle-bracket-delimited URLs.
+     *
+     * Spaces are intentionally allowed (that is the point of angle-bracket URLs).
+     * All other C0/C1 control characters are rejected — browsers strip CR and TAB
+     * from href values, which would allow javascript: scheme bypass if permitted.
+     */
+    private function isSafeAngleBracketUrl(string $url): bool
+    {
+        // Reject control chars except space (0x20). rawurldecode first to catch %0d/%09 etc.
+        if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
+            return false;
+        }
+        // Reject protocol-relative URLs.
+        if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
+            return false;
+        }
+        // For scheme extraction, encode spaces so parse_url() doesn't choke.
+        $urlForParse = str_replace(' ', '%20', $url);
+        $parts = parse_url($urlForParse);
         if ($parts === false) {
             return false;
         }
