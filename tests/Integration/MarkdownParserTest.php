@@ -127,7 +127,7 @@ final class MarkdownParserTest extends TestCase
         $parser = new MarkdownParser(maxBytes: 1024);
 
         $html = $parser->parse(str_repeat("\u{00E9}", 512));
-        $this->assertIsString($html);
+        $this->assertNotEmpty($html);
     }
 
     // ── NFC normalisation ─────────────────────────────────────────────────────

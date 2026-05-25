@@ -99,4 +99,5 @@ check(str_contains($html, '<blockquote>'), 'E2E mixed: blockquote');
 check(str_contains($html, '<pre><code'), 'E2E mixed: code block');
 
 echo PHP_EOL . "Results: {$ok} OK, {$fail} FAIL" . PHP_EOL;
+// @phpstan-ignore-next-line greater.alwaysFalse
 exit($fail > 0 ? 1 : 0);

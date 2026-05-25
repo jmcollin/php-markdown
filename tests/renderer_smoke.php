@@ -36,6 +36,7 @@ function check(bool $cond, string $label): void
     }
 }
 
+/** @param \PhpMarkdown\Node\NodeInterface[] $children */
 function doc(array $children): DocumentNode
 {
     return new DocumentNode($children);
@@ -155,4 +156,5 @@ $avg = (microtime(true) - $start) / 10 * 1000;
 check($avg < 5, 'Perf: ~500 nodes avg=' . round($avg, 2) . 'ms < 5ms');
 
 echo PHP_EOL . "Results: {$ok} OK, {$fail} FAIL" . PHP_EOL;
+// @phpstan-ignore-next-line greater.alwaysFalse
 exit($fail > 0 ? 1 : 0);

@@ -24,6 +24,7 @@ final class AtxHeadingClosingHashTest extends TestCase
         $this->renderer = new HtmlRenderer();
     }
 
+    /** @return \PhpMarkdown\Lexer\Token[] */
     private function tokenize(string $input): array
     {
         return $this->lexer->tokenize($input);
