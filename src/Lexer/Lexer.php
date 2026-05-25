@@ -324,11 +324,6 @@ final class Lexer
                 implode("\n", $fencedLines),
                 ['language' => $fencedLanguage],
             );
-            $inFencedBlock  = false;
-            $fencedLanguage = '';
-            $fencedLines    = [];
-            $fenceChar      = '';
-            $fenceLength    = 0;
         }
 
         // Unclosed indented code block — emit what was collected
