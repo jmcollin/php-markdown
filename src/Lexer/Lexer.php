@@ -18,7 +18,7 @@ final class Lexer
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
-    private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
+    private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
     private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';
     private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
@@ -456,12 +456,27 @@ final class Lexer
 
         // URL validation is intentionally deferred to InlineParser::isSafeUrl() at resolution time.
         if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
-            $href = $m[2];
+            // Groups: 2=angle-bracket URL content (stripped), 3=bare URL.
+            // When the angle-bracket branch <(...)> matches, $m[3] is absent or empty ''.
+            // When the bare URL branch (\S+) matches, $m[3] is non-empty (bare URLs cannot be empty).
+            // They are mutually exclusive (alternation); use non-empty $m[3] to detect bare URL.
+            $isAngleBracket = ($m[3] ?? '') === '';
+            if ($isAngleBracket) {
+                // Angle-bracket branch: unescape backslash sequences (e.g. \> → >)
+                $href = (string) preg_replace('/\\\\(.)/', '$1', $m[2]);
+            } else {
+                // Bare URL branch. If it starts with '<', it was an attempted but invalid
+                // angle-bracket URL (e.g. unclosed or containing unescaped '<') — reject it.
+                if (str_starts_with($m[3], '<')) {
+                    return new Token(TokenType::PARAGRAPH, $line);
+                }
+                $href = $m[3];
+            }
             if (strlen($href) > 2048) {
                 return new Token(TokenType::PARAGRAPH, $line);
             }
-            // Groups: 3=double-quote title, 4=single-quote title, 5=paren title
-            $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
+            // Groups: 4=double-quote title, 5=single-quote title, 6=paren title
+            $rawTitle = ($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : (($m[6] ?? '') !== '' ? $m[6] : null));
             // Strip control characters from title (U+0000–U+001F, U+007F)
             $title = $rawTitle !== null ? preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle) : null;
             return new Token(
