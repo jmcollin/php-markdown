@@ -13,13 +13,14 @@ namespace PhpMarkdown\Lexer;
 final class Lexer
 {
     private const PATTERN_HEADING           = '/^(#{1,6})\s+(.+)$/';
-    private const PATTERN_FENCED_OPEN      = '/^(`{3,})\s*([A-Za-z0-9_-]*)\s*$/';
-    private const PATTERN_FENCED_CLOSE     = '/^`{3,}$/';
+    private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
-    private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+"([^"]*)")?$/';
+    private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(\S+)(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
+    /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
+    private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';
     private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
     private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
     private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
@@ -27,6 +28,7 @@ final class Lexer
     private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
     private const PATTERN_COLUMNS_CLOSE    = '/^:::$/';
     private const PATTERN_COLUMNS_SEP      = '/^\|\|\|$/';
+    private const PATTERN_INDENTED_CODE    = '/^(    |\t)(.*)/s';
 
     /**
      * Block-level HTML tags that trigger HTML_BLOCK detection (CommonMark §4.6).
@@ -50,6 +52,7 @@ final class Lexer
      *
      * Capture group 1: the stripped line content.
      */
+    /** @var non-empty-string */
     private readonly string $patternHtmlBlockStart;
 
     public function __construct()
@@ -78,7 +81,10 @@ final class Lexer
         $inFencedBlock = false;
         $fencedLanguage = '';
         $fencedLines = [];
+        $fenceChar = '';
+        $fenceLength = 0;
         $pendingToken = null;
+        $pendingLinkDef = null; // LINK_DEFINITION token awaiting a possible next-line title
 
         $inHtmlBlock = false;
         $htmlLines = [];
@@ -88,6 +94,10 @@ final class Lexer
         $columnsSepFound   = false;
         $columnsLeftLines  = [];
         $columnsRightLines = [];
+
+        $inIndentedBlock = false;
+        $indentedLines   = [];
+        $pendingBlanks   = [];
 
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
@@ -173,7 +183,7 @@ final class Lexer
             }
 
             if ($inFencedBlock) {
-                if (preg_match(self::PATTERN_FENCED_CLOSE, $line)) {
+                if (preg_match('/^ {0,3}' . preg_quote($fenceChar, '/') . '{' . $fenceLength . ',}\s*$/', $line)) {
                     if ($pendingToken !== null) {
                         $tokens[] = $pendingToken;
                         $pendingToken = null;
@@ -183,9 +193,11 @@ final class Lexer
                         implode("\n", $fencedLines),
                         ['language' => $fencedLanguage],
                     );
-                    $inFencedBlock = false;
+                    $inFencedBlock  = false;
                     $fencedLanguage = '';
-                    $fencedLines = [];
+                    $fencedLines    = [];
+                    $fenceChar      = '';
+                    $fenceLength    = 0;
                 } else {
                     $fencedLines[] = $line;
                 }
@@ -197,9 +209,11 @@ final class Lexer
                     $tokens[] = $pendingToken;
                     $pendingToken = null;
                 }
-                $inFencedBlock = true;
+                $inFencedBlock  = true;
                 $fencedLanguage = $m[2];
-                $fencedLines = [];
+                $fencedLines    = [];
+                $fenceChar      = $m[1][0];
+                $fenceLength    = strlen($m[1]);
                 continue;
             }
 
@@ -228,6 +242,9 @@ final class Lexer
                 continue;
             }
 
+            // Capture paragraph-active state before setext promotion may clear it.
+            $hadPendingToken = $pendingToken !== null;
+
             // Setext heading detection: a pending text line followed by === or ---
             if ($pendingToken !== null) {
                 if (preg_match(self::PATTERN_SETEXT_H1, $line)) {
@@ -244,7 +261,79 @@ final class Lexer
                 $pendingToken = null;
             }
 
+            // Multiline link ref title (CommonMark §4.7): a LINK_DEFINITION with no title
+            // may be followed by a standalone title line on the very next line.
+            if ($pendingLinkDef !== null) {
+                if ($line === '' || ctype_space($line)) {
+                    // Blank line terminates the possibility of a continuation title.
+                    $tokens[] = $pendingLinkDef;
+                    $pendingLinkDef = null;
+                    $tokens[] = new Token(TokenType::BLANK, '');
+                    continue;
+                }
+                if (preg_match(self::PATTERN_STANDALONE_TITLE, $line, $tm)) {
+                    // One of the three capture groups will be set.
+                    $rawTitle = $tm[1] !== '' ? $tm[1] : ($tm[2] !== '' ? $tm[2] : ($tm[3] ?? ''));
+                    // Strip control characters from title (U+0000–U+001F, U+007F)
+                    $cleanTitle = (string) preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle);
+                    $meta = $pendingLinkDef->meta;
+                    $meta['title'] = $cleanTitle !== '' ? $cleanTitle : null;
+                    $tokens[] = new Token(TokenType::LINK_DEFINITION, $pendingLinkDef->content, $meta);
+                    $pendingLinkDef = null;
+                    continue;
+                }
+                // Current line is not a title line — flush the pending def and fall through.
+                $tokens[] = $pendingLinkDef;
+                $pendingLinkDef = null;
+                // Fall through to process $line normally.
+            }
+
+            // Indented code block drain (continuation).
+            if ($inIndentedBlock) {
+                if (preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                    && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+                    && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+                ) {
+                    $indentedLines = [...$indentedLines, ...$pendingBlanks, $m[2]];
+                    $pendingBlanks = [];
+                    continue;
+                }
+                if ($line === '' || ctype_space($line)) {
+                    $pendingBlanks[] = '';
+                    continue;
+                }
+                // Non-indented, non-blank: close block.
+                $tokens[] = new Token(
+                    TokenType::INDENTED_CODE,
+                    implode("\n", $indentedLines) . "\n",
+                );
+                $inIndentedBlock = false;
+                $indentedLines   = [];
+                $pendingBlanks   = [];
+                // Fall through to process current line normally.
+            }
+
+            // Start new indented code block (only when no paragraph was active,
+            // and only when the line is not a list item — list items with leading spaces
+            // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
+            if (!$hadPendingToken
+                && preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+                && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+            ) {
+                $inIndentedBlock = true;
+                $indentedLines   = [$m[2]];
+                $pendingBlanks   = [];
+                continue;
+            }
+
             $token = $this->matchLine($line);
+
+            // A LINK_DEFINITION with no title may have its title on the next line (CommonMark §4.7).
+            if ($token->type === TokenType::LINK_DEFINITION && $token->meta['title'] === null) {
+                $pendingLinkDef = $token;
+                continue;
+            }
 
             // A plain paragraph line is held as pending to allow setext promotion on the next line.
             if ($token->type === TokenType::PARAGRAPH && ($line !== '' && !ctype_space($line))) {
@@ -253,6 +342,11 @@ final class Lexer
             }
 
             $tokens[] = $token;
+        }
+
+        // Flush any remaining pending link def (no continuation title followed)
+        if ($pendingLinkDef !== null) {
+            $tokens[] = $pendingLinkDef;
         }
 
         // Flush any remaining pending token
@@ -271,6 +365,14 @@ final class Lexer
                 TokenType::FENCED_CODE,
                 implode("\n", $fencedLines),
                 ['language' => $fencedLanguage],
+            );
+        }
+
+        // Unclosed indented code block — emit what was collected
+        if ($inIndentedBlock && $indentedLines !== []) {
+            $tokens[] = new Token(
+                TokenType::INDENTED_CODE,
+                implode("\n", $indentedLines) . "\n",
             );
         }
 
@@ -309,9 +411,10 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_HEADING, $line, $m)) {
+            $content = (string) preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2]));
             return new Token(
                 TokenType::HEADING,
-                trim($m[2]),
+                $content,
                 ['level' => strlen($m[1])],
             );
         }
@@ -357,7 +460,8 @@ final class Lexer
             if (strlen($href) > 2048) {
                 return new Token(TokenType::PARAGRAPH, $line);
             }
-            $rawTitle = isset($m[3]) && $m[3] !== '' ? $m[3] : null;
+            // Groups: 3=double-quote title, 4=single-quote title, 5=paren title
+            $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
             // Strip control characters from title (U+0000–U+001F, U+007F)
             $title = $rawTitle !== null ? preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle) : null;
             return new Token(
@@ -366,7 +470,7 @@ final class Lexer
                 [
                     'label' => $m[1],
                     'href'  => $href,
-                    'title' => $title !== '' ? $title : null,
+                    'title' => ($title !== null && $title !== '') ? $title : null,
                 ],
             );
         }

@@ -36,6 +36,7 @@ function check(bool $cond, string $label): void
     }
 }
 
+/** @param \PhpMarkdown\Node\NodeInterface[] $children */
 function doc(array $children): DocumentNode
 {
     return new DocumentNode($children);
@@ -87,14 +88,14 @@ $out = $r->render(doc([new FencedCodeNode('plain code')]));
 check($out === '<pre><code>plain code</code></pre>', 'AC5b: fenced code no language');
 
 // AC6: Unordered list
-$out = $r->render(doc([new ListNode(false, [
+$out = $r->render(doc([new ListNode(ordered: false, children: [
     new ListItemNode([new TextNode('one')]),
     new ListItemNode([new TextNode('two')]),
 ])]));
 check($out === '<ul><li>one</li><li>two</li></ul>', 'AC6: unordered list');
 
 // AC6b: Ordered list
-$out = $r->render(doc([new ListNode(true, [
+$out = $r->render(doc([new ListNode(ordered: true, children: [
     new ListItemNode([new TextNode('a')]),
 ])]));
 check($out === '<ol><li>a</li></ol>', 'AC6b: ordered list');
@@ -144,7 +145,7 @@ check($out === '<p><strong>bold</strong><em>italic</em></p>', 'Edge: strong+em r
 $items = array_fill(0, 50, new ListItemNode([new TextNode('item')]));
 $blocks = array_merge(
     [new HeadingNode(1, [new TextNode('Title')])],
-    array_fill(0, 9, new ListNode(false, $items)),
+    array_fill(0, 9, new ListNode(ordered: false, children: $items)),
 );
 $bigDoc = new DocumentNode($blocks);
 $start = microtime(true);
@@ -155,4 +156,5 @@ $avg = (microtime(true) - $start) / 10 * 1000;
 check($avg < 5, 'Perf: ~500 nodes avg=' . round($avg, 2) . 'ms < 5ms');
 
 echo PHP_EOL . "Results: {$ok} OK, {$fail} FAIL" . PHP_EOL;
+// @phpstan-ignore-next-line greater.alwaysFalse
 exit($fail > 0 ? 1 : 0);

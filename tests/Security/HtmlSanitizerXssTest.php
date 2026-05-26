@@ -62,6 +62,7 @@ final class HtmlSanitizerXssTest extends TestCase
         $imgs = $dom->getElementsByTagName('img');
         $img  = $imgs->item(0);
         $this->assertNotNull($img, 'img element must be present in sanitized output');
+        $this->assertInstanceOf(\DOMElement::class, $img, 'img must be a DOMElement');
         $this->assertFalse($img->hasAttribute('onerror'), 'onerror must not be a DOM attribute');
     }
 
@@ -138,7 +139,6 @@ final class HtmlSanitizerXssTest extends TestCase
         $result  = $this->sanitizer->sanitize($input);
         $elapsed = (hrtime(true) - $start) / 1_000_000; // ms
 
-        $this->assertIsString($result);
         $this->assertStringContainsString('text', $result);
         $this->assertStringContainsString('title=', $result);
         $this->assertLessThan(2000, $elapsed, 'Sanitizer must complete within 2 seconds on long safe attrs');
@@ -154,7 +154,6 @@ final class HtmlSanitizerXssTest extends TestCase
 
         $result = $this->sanitizer->sanitize($html);
 
-        $this->assertIsString($result);
         $this->assertStringNotContainsString('Fatal', $result);
         $this->assertStringContainsString('<div>', $result);
         $this->assertStringContainsString('text', $result);

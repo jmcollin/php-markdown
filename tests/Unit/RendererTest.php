@@ -39,6 +39,7 @@ final class RendererTest extends TestCase
         $this->renderer = new HtmlRenderer();
     }
 
+    /** @param \PhpMarkdown\Node\NodeInterface[] $children */
     private function render(array $children): string
     {
         return $this->renderer->render(new DocumentNode($children));
@@ -134,7 +135,7 @@ final class RendererTest extends TestCase
 
     public function testUnorderedList(): void
     {
-        $out = $this->render([new ListNode(false, [
+        $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('a')]),
             new ListItemNode([new TextNode('b')]),
         ])]);
@@ -143,7 +144,7 @@ final class RendererTest extends TestCase
 
     public function testOrderedList(): void
     {
-        $out = $this->render([new ListNode(true, [
+        $out = $this->render([new ListNode(ordered: true, children: [
             new ListItemNode([new TextNode('a')]),
         ])]);
         $this->assertSame('<ol><li>a</li></ol>', $out);
@@ -348,10 +349,10 @@ final class RendererTest extends TestCase
     public function testNestedUnorderedList(): void
     {
         $out = $this->render([
-            new ListNode(false, [
+            new ListNode(ordered: false, children: [
                 new ListItemNode([
                     new TextNode('a'),
-                    new ListNode(false, [
+                    new ListNode(ordered: false, children: [
                         new ListItemNode([new TextNode('b')]),
                     ]),
                 ]),
@@ -363,10 +364,10 @@ final class RendererTest extends TestCase
     public function testMixedOrderedUnorderedNesting(): void
     {
         $out = $this->render([
-            new ListNode(true, [
+            new ListNode(ordered: true, children: [
                 new ListItemNode([
                     new TextNode('first'),
-                    new ListNode(false, [
+                    new ListNode(ordered: false, children: [
                         new ListItemNode([new TextNode('nested')]),
                     ]),
                 ]),
@@ -379,7 +380,7 @@ final class RendererTest extends TestCase
 
     public function testCheckedListItemRendersCheckbox(): void
     {
-        $out = $this->render([new ListNode(false, [
+        $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Done')], checked: true),
         ])]);
         $this->assertSame('<ul><li><input type="checkbox" disabled checked> Done</li></ul>', $out);
@@ -387,7 +388,7 @@ final class RendererTest extends TestCase
 
     public function testUncheckedListItemRendersCheckbox(): void
     {
-        $out = $this->render([new ListNode(false, [
+        $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Todo')], checked: false),
         ])]);
         $this->assertSame('<ul><li><input type="checkbox" disabled> Todo</li></ul>', $out);
@@ -395,7 +396,7 @@ final class RendererTest extends TestCase
 
     public function testPlainListItemNoCheckbox(): void
     {
-        $out = $this->render([new ListNode(false, [
+        $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('plain')], checked: null),
         ])]);
         $this->assertSame('<ul><li>plain</li></ul>', $out);
@@ -405,7 +406,7 @@ final class RendererTest extends TestCase
     {
         // Pins behavior: checkbox + space separator even when children render to ''.
         // Guards against silent removal of the separator in future refactors.
-        $out = $this->render([new ListNode(false, [
+        $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([], checked: true),
         ])]);
         $this->assertSame('<ul><li><input type="checkbox" disabled checked> </li></ul>', $out);

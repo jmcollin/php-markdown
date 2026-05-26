@@ -33,6 +33,7 @@ final class ColumnsRendererTest extends TestCase
         );
     }
 
+    /** @param \PhpMarkdown\Node\NodeInterface[] $children */
     private function renderNode(array $children): string
     {
         return $this->renderer->render(new DocumentNode($children));

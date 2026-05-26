@@ -8,6 +8,7 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
@@ -18,6 +19,7 @@ use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
 
+use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
@@ -60,6 +62,7 @@ final class HtmlRenderer
             $node instanceof ListNode         => $this->renderList($node),
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
+            $node instanceof IndentedCodeNode => '<pre><code>' . $this->esc($node->content) . '</code></pre>',
             $node instanceof HorizontalRuleNode => '<hr>',
             $node instanceof ColumnsNode       => $this->renderColumns($node),
             // Raw HTML blocks: sanitize if allowRawHtml, else escape (XSS-safe default).
@@ -85,6 +88,7 @@ final class HtmlRenderer
                 $this->allowRawHtml
                     ? $this->stripInlineAttrs($node->content)
                     : $this->esc($node->content),
+            $node instanceof AutolinkNode      => $this->renderAutolink($node),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
@@ -105,17 +109,56 @@ final class HtmlRenderer
 
     private function renderList(ListNode $node): string
     {
-        $tag = $node->ordered ? 'ol' : 'ul';
-        return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+        $tag   = $node->ordered ? 'ol' : 'ul';
+        $inner = '';
+        foreach ($node->children as $item) {
+            $inner .= $this->renderListItem($item, $node->loose);
+        }
+        return '<' . $tag . '>' . $inner . '</' . $tag . '>';
     }
 
-    private function renderListItem(ListItemNode $node): string
+    private function renderListItem(ListItemNode $node, bool $loose = false): string
     {
+        $content = $this->renderListItemContent($node->children, $loose);
+
         if ($node->checked === null) {
-            return '<li>' . $this->renderChildren($node->children) . '</li>';
+            return '<li>' . $content . '</li>';
         }
         $checkbox = '<input type="checkbox" disabled' . ($node->checked ? ' checked' : '') . '>';
-        return '<li>' . $checkbox . ' ' . $this->renderChildren($node->children) . '</li>';
+        return '<li>' . $checkbox . ' ' . $content . '</li>';
+    }
+
+    /**
+     * @param \PhpMarkdown\Node\NodeInterface[] $children
+     */
+    private function renderListItemContent(array $children, bool $loose): string
+    {
+        if (!$loose) {
+            return $this->renderChildren($children);
+        }
+
+        $inlinePart = [];
+        $blockPart  = [];
+        $hitBlock   = false;
+        foreach ($children as $child) {
+            if (!$hitBlock && $child instanceof ListNode) {
+                $hitBlock = true;
+            }
+            if ($hitBlock) {
+                $blockPart[] = $child;
+            } else {
+                $inlinePart[] = $child;
+            }
+        }
+
+        $html = '';
+        if ($inlinePart !== []) {
+            $html .= '<p>' . $this->renderChildren($inlinePart) . '</p>';
+        }
+        foreach ($blockPart as $block) {
+            $html .= $this->renderNode($block);
+        }
+        return $html;
     }
 
     /**
@@ -155,6 +198,15 @@ final class HtmlRenderer
             ? ' title="' . $this->esc($node->title) . '"'
             : '';
         return '<img src="' . $this->esc($node->src) . '" alt="' . $this->esc($node->alt) . '"' . $titleAttr . '>';
+    }
+
+    private function renderAutolink(AutolinkNode $node): string
+    {
+        $href = $node->isEmail
+            ? 'mailto:' . $this->esc($node->url)
+            : $this->esc($node->url);
+        $text = $this->esc($node->url);
+        return "<a href=\"{$href}\">{$text}</a>";
     }
 
     private function renderTable(TableNode $node): string

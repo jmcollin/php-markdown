@@ -12,6 +12,7 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
 use PhpMarkdown\Node\Block\ListItemNode;
@@ -88,6 +89,12 @@ final class Parser
                     content: $token->content,
                     language: $token->meta['language'] ?? '',
                 );
+                $i++;
+                continue;
+            }
+
+            if ($token->type === TokenType::INDENTED_CODE) {
+                $children[] = new IndentedCodeNode(content: $token->content);
                 $i++;
                 continue;
             }
@@ -213,6 +220,7 @@ final class Parser
         $count   = count($tokens);
         $ordered = $tokens[$i]->meta['ordered'];
         $items   = [];
+        $loose   = false;
 
         while ($i < $count
             && $tokens[$i]->type === TokenType::LIST_ITEM
@@ -234,10 +242,26 @@ final class Parser
                 $nodeChildren = [...$inlineChildren, $subList];
             }
 
+            // Peek ahead for blank tokens. Consume only when the token after the blank run
+            // is a LIST_ITEM at the same depth and ordered value (inter-item blanks).
+            $j = $i;
+            while ($j < $count && $tokens[$j]->type === TokenType::BLANK) {
+                $j++;
+            }
+            if ($j > $i
+                && $j < $count
+                && $tokens[$j]->type === TokenType::LIST_ITEM
+                && $tokens[$j]->meta['depth'] === $depth
+                && $tokens[$j]->meta['ordered'] === $ordered
+            ) {
+                $i     = $j;
+                $loose = true;
+            }
+
             $items[] = new ListItemNode(children: $nodeChildren, checked: $itemToken->meta['checked'] ?? null);
         }
 
-        return new ListNode(ordered: $ordered, children: $items);
+        return new ListNode(ordered: $ordered, loose: $loose, children: $items);
     }
 
     /**

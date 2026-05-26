@@ -93,4 +93,5 @@ $avg = (microtime(true) - $start) / 5 * 1000;
 check($avg < 10, 'Perf: 1000 lines avg=' . round($avg, 2) . 'ms < 10ms');
 
 echo PHP_EOL . "Results: {$ok} OK, {$fail} FAIL" . PHP_EOL;
+// @phpstan-ignore-next-line greater.alwaysFalse
 exit($fail > 0 ? 1 : 0);

@@ -9,6 +9,7 @@ enum TokenType
     case HEADING;
     case PARAGRAPH;
     case FENCED_CODE;
+    case INDENTED_CODE;
     case LIST_ITEM;
     case BLOCKQUOTE;
     case HORIZONTAL_RULE;
