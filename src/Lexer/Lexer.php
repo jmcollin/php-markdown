@@ -273,7 +273,7 @@ final class Lexer
                 }
                 if (preg_match(self::PATTERN_STANDALONE_TITLE, $line, $tm)) {
                     // One of the three capture groups will be set.
-                    $rawTitle = ($tm[1] ?? '') !== '' ? $tm[1] : (($tm[2] ?? '') !== '' ? $tm[2] : ($tm[3] ?? ''));
+                    $rawTitle = $tm[1] !== '' ? $tm[1] : ($tm[2] !== '' ? $tm[2] : ($tm[3] ?? ''));
                     // Strip control characters from title (U+0000–U+001F, U+007F)
                     $cleanTitle = (string) preg_replace('/[\x00-\x1F\x7F]/', '', $rawTitle);
                     $meta = $pendingLinkDef->meta;
