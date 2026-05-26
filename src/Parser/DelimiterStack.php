@@ -114,8 +114,13 @@ final class DelimiterStack
             $current = max(0, $openerIdx - 1);
         }
 
-        // Convert remaining DelimiterRuns into TextNodes, then merge adjacent TextNodes.
+        // Convert remaining DelimiterRuns into TextNodes.
+        // Unmatched runs are literal chars that must join adjacent text on both sides
+        // (e.g. "**unclosed" → TextNode("**unclosed")). However, TextNodes produced by
+        // backslash escapes must remain distinct — only merge when the boundary is a
+        // DelimiterRun conversion, tracked by $lastWasDelimiter.
         $result = [];
+        $lastWasDelimiter = false;
         foreach ($tokens as $token) {
             if ($token instanceof DelimiterRun) {
                 $literal = str_repeat($token->char, $token->count);
@@ -126,7 +131,8 @@ final class DelimiterStack
                 } else {
                     $result[] = new TextNode($literal);
                 }
-            } elseif ($token instanceof TextNode) {
+                $lastWasDelimiter = true;
+            } elseif ($token instanceof TextNode && $lastWasDelimiter) {
                 $last = end($result);
                 if ($last instanceof TextNode) {
                     array_pop($result);
@@ -134,8 +140,10 @@ final class DelimiterStack
                 } else {
                     $result[] = $token;
                 }
+                $lastWasDelimiter = false;
             } else {
                 $result[] = $token;
+                $lastWasDelimiter = false;
             }
         }
 
