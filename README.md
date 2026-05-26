@@ -40,19 +40,36 @@ require '/path/to/src/Node/Block/BlockquoteNode.php';
 require '/path/to/src/Node/Block/ListNode.php';
 require '/path/to/src/Node/Block/ListItemNode.php';
 require '/path/to/src/Node/Block/FencedCodeNode.php';
+require '/path/to/src/Node/Block/IndentedCodeNode.php';
 require '/path/to/src/Node/Block/HorizontalRuleNode.php';
 require '/path/to/src/Node/Block/TableNode.php';
 require '/path/to/src/Node/Block/TableRowNode.php';
 require '/path/to/src/Node/Block/TableCellNode.php';
+require '/path/to/src/Node/Block/RawHtmlBlockNode.php';
+require '/path/to/src/Node/Block/ColumnsNode.php';
+require '/path/to/src/Node/Block/FootnoteDefinitionNode.php';
+require '/path/to/src/Node/Block/FootnotesContainerNode.php';
 require '/path/to/src/Node/Inline/TextNode.php';
 require '/path/to/src/Node/Inline/EmphasisNode.php';
 require '/path/to/src/Node/Inline/StrongNode.php';
+require '/path/to/src/Node/Inline/StrikethroughNode.php';
 require '/path/to/src/Node/Inline/CodeNode.php';
 require '/path/to/src/Node/Inline/LinkNode.php';
 require '/path/to/src/Node/Inline/ImageNode.php';
+require '/path/to/src/Node/Inline/AutolinkNode.php';
+require '/path/to/src/Node/Inline/HardBreakNode.php';
+require '/path/to/src/Node/Inline/HtmlEntityNode.php';
+require '/path/to/src/Node/Inline/RawHtmlInlineNode.php';
+require '/path/to/src/Node/Inline/FootnoteRefNode.php';
+require '/path/to/src/Normalizer/NormalizerInterface.php';
+require '/path/to/src/Normalizer/IcuNormalizer.php';
+require '/path/to/src/Sanitizer/HtmlSanitizer.php';
 require '/path/to/src/Lexer/TokenType.php';
 require '/path/to/src/Lexer/Token.php';
 require '/path/to/src/Lexer/Lexer.php';
+require '/path/to/src/Parser/DelimiterRun.php';
+require '/path/to/src/Parser/FlankingComputer.php';
+require '/path/to/src/Parser/DelimiterStack.php';
 require '/path/to/src/Parser/InlineParser.php';
 require '/path/to/src/Parser/Parser.php';
 require '/path/to/src/Parser/FrontMatterParser.php';
@@ -129,25 +146,57 @@ echo $parser->parse($markdown);
 // <tbody><tr><td align="left">Alice</td><td align="right">95</td></tr>...
 ```
 
+### Raw HTML pass-through
+
+Raw HTML is escaped by default (XSS-safe). Opt in to sanitized pass-through with `allowRawHtml: true`:
+
+```php
+$html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
+// <div class="note">text</div>  — dangerous tags/attrs stripped by HtmlSanitizer
+```
+
 ---
 
 ## Supported Features
 
+### Block elements
+
 | Feature | Syntax | Output |
 |---------|--------|--------|
-| Headings H1–H6 | `# Heading` … `###### Heading` | `<h1>` … `<h6>` |
-| Bold | `**text**` or `__text__` | `<strong>` |
-| Italic | `*text*` or `_text_` | `<em>` |
-| Inline code | `` `code` `` | `<code>` |
-| Fenced code block | ```` ```lang … ``` ```` | `<pre><code class="language-*">` |
-| Unordered list | `- item` | `<ul><li>` |
+| Headings H1–H6 (ATX) | `# Heading` … `###### Heading` | `<h1>` … `<h6>` |
+| Headings H1–H2 (Setext) | `Heading\n===` / `Heading\n---` | `<h1>` / `<h2>` |
+| Paragraph | plain text | `<p>` |
+| Blockquote (nested) | `> text` | `<blockquote>` |
+| Unordered list | `- item` / `* item` / `+ item` | `<ul><li>` |
 | Ordered list | `1. item` | `<ol><li>` |
-| Blockquote | `> text` | `<blockquote>` |
+| Nested lists | indented `- item` inside list item | `<ul>` inside `<li>` |
+| Task list | `- [x] done` / `- [ ] todo` | `<li><input type="checkbox" …>` |
+| Fenced code block | ```` ```lang … ``` ```` | `<pre><code class="language-*">` |
+| Mermaid diagram | ```` ```mermaid … ``` ```` | `<div class="mermaid">` |
+| Indented code block | 4-space / 1-tab indent | `<pre><code>` |
 | Horizontal rule | `---` / `***` / `___` | `<hr>` |
-| Link | `[text](url)` or `[text](url "title")` | `<a href="…">` |
-| Image | `![alt](src)` | `<img src="…" alt="…">` |
 | GFM Table | `\| col \| col \|` + separator row | `<table><thead><tbody>` with `align` |
 | Front Matter | `---\nkey: value\n---` at file top | parsed into `meta` array via `parseWithMeta()` |
+| Raw HTML block | `<div>…</div>` | escaped (default) or sanitized (`allowRawHtml: true`) |
+| Two-column layout | `:::columns … \|\|\| … :::` | `<div class="grid grid-cols-2 …">` |
+| Footnote definition | `[^label]: body` | rendered in `<section class="footnotes">` |
+
+### Inline elements
+
+| Feature | Syntax | Output |
+|---------|--------|--------|
+| Bold | `**text**` or `__text__` | `<strong>` |
+| Italic | `*text*` or `_text_` | `<em>` |
+| Strikethrough | `~~text~~` | `<del>` |
+| Inline code | `` `code` `` | `<code>` |
+| Link (inline) | `[text](url)` or `[text](url "title")` | `<a href="…">` |
+| Link (reference) | `[text][ref]` with `[ref]: url` definition | `<a href="…">` |
+| Image | `![alt](src)` or `![alt](src "title")` | `<img src="…" alt="…">` |
+| Autolink | `<https://…>` or `<user@example.com>` | `<a href="…">` |
+| Hard line break | two trailing spaces + newline | `<br>` |
+| HTML entity | `&amp;`, `&#42;`, etc. | passed through verbatim |
+| Raw HTML inline | `<span class="x">` | escaped (default) or sanitized (`allowRawHtml: true`) |
+| Footnote reference | `[^label]` | `<sup><a href="#fn-…">` |
 
 ---
 
@@ -169,10 +218,12 @@ Input string
 | Class | Responsibility |
 |-------|---------------|
 | `Lexer` | Tokenises the input line by line into `Token[]` |
-| `InlineParser` | Recursive scanner for inline elements inside block content |
+| `InlineParser` | Recursive delimiter-stack scanner for inline elements |
 | `Parser` | Consumes `Token[]` and builds a `DocumentNode` AST |
 | `HtmlRenderer` | Traverses the AST and emits escaped HTML5 |
+| `HtmlSanitizer` | DOM-based sanitizer used when `allowRawHtml: true` |
 | `FrontMatterParser` | Extracts and parses the YAML-subset front matter block |
+| `IcuNormalizer` | NFC-normalizes input via PHP `intl` if available |
 | `MarkdownParser` | Public façade — wires all stages together |
 
 All AST nodes are **immutable** (`readonly` properties, PHP 8.2+).
@@ -189,7 +240,11 @@ All user-supplied content is escaped via `htmlspecialchars(ENT_QUOTES | ENT_SUBS
 
 Dangerous URL schemes (`javascript:`, `vbscript:`, `data:`) in links are detected at parse time and rendered as literal text rather than `<a>` elements.
 
-> **Note:** The library does **not** allow raw HTML pass-through. Any `<tag>` in the Markdown input is escaped and displayed as text.
+**Raw HTML** is escaped by default. Passing `allowRawHtml: true` enables DOM-based sanitization via `HtmlSanitizer`:
+- Forbidden tags (`script`, `iframe`, `form`, etc.) are removed with their entire subtree.
+- Unknown tags are unwrapped (children promoted).
+- All `on*` event handlers, `style`, and `javascript:`/`data:` URL attributes are stripped.
+- `target="_blank"` links get `rel="noopener"` injected automatically.
 
 ---
 
@@ -208,16 +263,11 @@ php test.php
 
 ## Limitations
 
-The following CommonMark features are **not** supported in v1:
+The following are **not** supported:
 
-- Nested lists (list items containing sub-lists)
-- Raw HTML pass-through (HTML tags in Markdown are always escaped)
-- Strikethrough (`~~text~~`)
-- Task lists (`- [x] item`)
-- Setext-style headings (`Heading\n======`)
-- Reference-style links (`[text][ref]`)
-- Hard line breaks (`  \n` — two trailing spaces)
-- Nested blockquotes rendered as separate nodes (consecutive `>` lines merge into one)
+- LaTeX / math (`$…$`, `$$…$$`)
+- Definition lists
+- Custom HTML attributes in Markdown syntax
 
 ---
 
