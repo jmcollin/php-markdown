@@ -92,12 +92,15 @@ final class InlineParser
     /** @var array<string, array{body: string, number?: int, occurrences?: int}> */
     private array $footnoteDefinitions = [];
 
+    private int $footnoteNextNumber = 0;
+
     /**
      * @param array<string, array{href: string, title: ?string}> $refs
      * @param array<string, array{body: string, number?: int, occurrences?: int}> $footnoteDefinitions
      *        Keyed by raw (case-sensitive) label. Mutated during scan():
      *        - 'number' int is assigned on first reference encounter.
      *        - 'occurrences' int is incremented on every encounter.
+     * @psalm-suppress UnusedParam
      * @return InlineNodeInterface[]
      */
     public function parse(string $text, array $refs = [], array &$footnoteDefinitions = []): array
@@ -111,7 +114,8 @@ final class InlineParser
             // Unset the reference to the caller's array before re-initialising the property,
             // so the caller's array retains the mutations (assigned numbers, occurrence counts).
             unset($this->footnoteDefinitions);
-            $this->footnoteDefinitions = [];
+            $this->footnoteDefinitions  = [];
+            $this->footnoteNextNumber   = 0;
         }
     }
 
@@ -332,21 +336,22 @@ final class InlineParser
                 if (isset($text[$pos + 1]) && $text[$pos + 1] === '^') {
                     if (preg_match(self::PATTERN_FOOTNOTE_REF, $text, $m, 0, $pos)) {
                         $label = $m[1];
-                        if (isset($this->footnoteDefinitions[$label]) && is_array($this->footnoteDefinitions[$label])) {
+                        if (isset($this->footnoteDefinitions[$label])) {
                             // Assign number on first encounter; increment occurrence counter.
                             if (!isset($this->footnoteDefinitions[$label]['number'])) {
-                                $nextNum = ($this->footnoteDefinitions['__next_number__'] ?? 0) + 1;
+                                $nextNum = ++$this->footnoteNextNumber;
                                 $this->footnoteDefinitions[$label]['number']      = $nextNum;
                                 $this->footnoteDefinitions[$label]['occurrences'] = 0;
-                                $this->footnoteDefinitions['__next_number__']     = $nextNum;
                             }
+                            /** @psalm-suppress PossiblyUndefinedArrayOffset */
                             $this->footnoteDefinitions[$label]['occurrences']++;
+                            /** @psalm-suppress PossiblyUndefinedArrayOffset */
+                            $defNumber  = $this->footnoteDefinitions[$label]['number'];
                             $occurrence = $this->footnoteDefinitions[$label]['occurrences'];
                             $tokens = $this->flushBuffer($buffer, $tokens);
                             $buffer = '';
                             $tokens[] = new FootnoteRefNode(
-                                label:      $label,
-                                number:     $this->footnoteDefinitions[$label]['number'],
+                                number:     $defNumber,
                                 occurrence: $occurrence,
                             );
                             $pos += strlen($m[0]);

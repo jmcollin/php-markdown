@@ -13,7 +13,6 @@ use PhpMarkdown\Node\InlineNodeInterface;
 final readonly class FootnoteDefinitionNode implements BlockNodeInterface
 {
     public function __construct(
-        public string $label,
         public int    $number,
         /** @var InlineNodeInterface[] */
         public array  $children,

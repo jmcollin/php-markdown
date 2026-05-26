@@ -432,16 +432,13 @@ final class Parser
     private function buildResolvedDefinitions(): array
     {
         $resolved = [];
-        foreach ($this->footnoteDefs as $label => $entry) {
-            // Cast to string: PHP converts numeric string keys (e.g. '1') to int in foreach.
-            $label = (string) $label;
-            if ($label === '__next_number__' || !isset($entry['number'])) {
+        foreach ($this->footnoteDefs as $entry) {
+            if (!isset($entry['number'])) {
                 continue;
             }
             $resolved[] = [
-                'label'       => $label,
                 'number'      => $entry['number'],
-                'occurrences' => $entry['occurrences'],
+                'occurrences' => $entry['occurrences'] ?? 1,
                 'body'        => $entry['body'],
             ];
         }
@@ -456,7 +453,6 @@ final class Parser
                     : 'fnref-' . $r['number'] . '-' . $i;
             }
             $nodes[] = new FootnoteDefinitionNode(
-                label:       $r['label'],
                 number:      $r['number'],
                 // No recursive footnote resolution: parse body with linkRefs only (two args).
                 children:    $this->inlineParser->parse($r['body'], $this->linkRefs),

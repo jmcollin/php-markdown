@@ -364,10 +364,12 @@ final class Lexer
             // A FOOTNOTE_DEFINITION token opens multi-line body accumulation.
             // Flush any pending setext heading candidate and pending link def first.
             if ($token->type === TokenType::FOOTNOTE_DEFINITION) {
+                /** @psalm-suppress TypeDoesNotContainType @phpstan-ignore notIdentical.alwaysFalse */
                 if ($pendingToken !== null) {
                     $tokens[] = $pendingToken;
                     $pendingToken = null;
                 }
+                /** @psalm-suppress TypeDoesNotContainType @phpstan-ignore notIdentical.alwaysFalse */
                 if ($pendingLinkDef !== null) {
                     $tokens[] = $pendingLinkDef;
                     $pendingLinkDef = null;

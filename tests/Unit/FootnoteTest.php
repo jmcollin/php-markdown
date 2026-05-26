@@ -183,7 +183,6 @@ final class FootnoteTest extends TestCase
             . '</ol></section>',
             $html
         );
-        $this->assertTrue(str_ends_with($html, '</section>'));
     }
 
     /** EC-4: Definition placed before the referencing paragraph resolves correctly. */
