@@ -74,20 +74,233 @@ iframe {
 <header>php-markdown Playground</header>
 <div id="error-msg"></div>
 <form method="post" action="/render">
-<textarea id="md-input" name="markdown" spellcheck="false"># Hello, Markdown!
+<textarea id="md-input" name="markdown" spellcheck="false">---
+title: php-markdown Feature Showcase
+version: 2.0
+---
 
-This is **bold** and this is *italic*.
+# php-markdown — Feature Showcase
 
-## List example
+A complete tour of every supported feature. Edit freely to experiment.
 
-- Item one
-- Item two
-- Item three
+---
 
-## Code example
+## 1. Headings — ATX style
+
+# H1 Heading
+## H2 Heading
+### H3 Heading
+#### H4 Heading
+##### H5 Heading
+###### H6 Heading
+
+## Headings — Setext style
+
+H1 via Setext
+=============
+
+H2 via Setext
+-------------
+
+---
+
+## 2. Inline Formatting
+
+**Bold** with double asterisks, __also bold__ with underscores.
+
+*Italic* with asterisks, _also italic_ with underscores.
+
+~~Strikethrough~~ with double tildes.
+
+`Inline code` with backticks.
+
+Combined: **bold with *nested italic* inside**.
+
+---
+
+## 3. Links &amp; Images
+
+Inline link: [php-markdown](https://github.com/example/php-markdown "Repository")
+
+Reference link: [Read the docs][docs]
+
+Autolink URL: &lt;https://example.com&gt;
+
+Autolink email: &lt;contact@example.com&gt;
+
+![PHP Logo](https://www.php.net/images/logos/php-logo.svg "PHP official logo")
+
+[docs]: https://example.com/docs "Documentation"
+
+---
+
+## 4. Lists
+
+### Unordered
+
+- Apple
+- Banana
+- Cherry
+
+### Ordered
+
+1. First item
+2. Second item
+3. Third item
+
+### Nested lists
+
+- Fruits
+  - Apple
+  - Orange
+    - Navel
+    - Blood orange
+- Vegetables
+  - Carrot
+  - Broccoli
+
+### Task list
+
+- [x] Implement lexer
+- [x] Implement parser
+- [x] Implement renderer
+- [ ] Publish to Packagist
+
+---
+
+## 5. Blockquotes (nested)
+
+> Simple blockquote.
+
+> Nested blockquotes:
+>
+> > Second level
+> >
+> > > Third level
+
+---
+
+## 6. Code Blocks
+
+### Fenced block — PHP
 
 ```php
-echo Michelf\Markdown::defaultTransform($markdown);
+&lt;?php
+declare(strict_types=1);
+
+use PhpMarkdown\MarkdownParser;
+
+$parser = new MarkdownParser();
+$html   = $parser->parse('# Hello **World**');
+echo $html;
+```
+
+### Fenced block — JavaScript
+
+```js
+const res = await fetch('/render', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ markdown: input }),
+});
+const { html } = await res.json();
+```
+
+### Indented code block (4 spaces)
+
+    function greet(string $name): string {
+        return "Hello, $name!";
+    }
+
+---
+
+## 7. Mermaid Diagram
+
+```mermaid
+flowchart LR
+    A[Lexer] -->|Token[]| B[Parser]
+    B -->|DocumentNode| C[Renderer]
+    C -->|string| D[HTML output]
+```
+
+---
+
+## 8. GFM Tables
+
+| Name    | Role       | Score |
+|:--------|:----------:|------:|
+| Alice   | Developer  |    95 |
+| Bob     | Designer   |    87 |
+| Charlie | QA         |    92 |
+
+---
+
+## 9. Horizontal Rules
+
+---
+
+***
+
+___
+
+---
+
+## 10. Hard Line Break
+
+Line one
+Line two — separated by a hard break (two trailing spaces after line one).
+
+---
+
+## 11. HTML Entities
+
+Copyright &amp;copy; 2026 &amp;mdash; All rights reserved &amp;amp; protected.
+
+Non-breaking space: before&amp;nbsp;after.
+
+---
+
+## 12. Footnotes
+
+CommonMark[^cm] is the reference specification for Markdown.
+
+Footnotes support multiple references to the same note[^multi] — even repeated[^multi].
+
+[^cm]: [CommonMark Spec](https://spec.commonmark.org) — the authoritative Markdown standard.
+[^multi]: This footnote is referenced twice above, generating two back-links.
+
+---
+
+## 13. Two-Column Layout
+
+:::columns
+### Left column
+
+- `Lexer` — tokenisation
+- `Parser` — AST construction
+- `HtmlRenderer` — output
+
+|||
+
+### Right column
+
+- `InlineParser` — inline elements
+- `FrontMatterParser` — YAML front matter
+- `HtmlSanitizer` — raw HTML pass-through
+
+:::
+
+---
+
+## 14. Front Matter
+
+The YAML block at the very top of this document is parsed silently.
+Access it via `parseWithMeta()`:
+
+```php
+['html' => $html, 'meta' => $meta] = $parser->parseWithMeta($markdown);
+echo $meta['title'];   // php-markdown Feature Showcase
+echo $meta['version']; // 2.0
 ```
 </textarea>
 <!-- allow-scripts: required for Mermaid.js to execute inside srcdoc.
