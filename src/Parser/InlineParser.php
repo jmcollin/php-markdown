@@ -42,7 +42,8 @@ final class InlineParser
     // \s* before final ) tolerates optional trailing spaces (EDGE-2).
     private const PATTERN_IMAGE_ANGLE = '/\G!\[([^\]]*)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
     private const PATTERN_LINK_ANGLE  = '/\G\[([^\]]+)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
-    private const PATTERN_REF_LINK = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+    private const PATTERN_REF_LINK  = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
+    private const PATTERN_REF_IMAGE = '/\G!\[([^\]]*)\]\[([^\]]*)\]/';
     // CommonMark §6.9 — autolinks: <scheme:path> and <email>.
     // Scheme: letter followed by 1–31 chars of [letter digit + - .], then colon.
     // Path: any char except NUL, space, <, >.
@@ -237,6 +238,52 @@ final class InlineParser
                     }
                     $pos += strlen($m[0]);
                     continue;
+                }
+                // Image reference: ![alt][ref] or collapsed ![alt][]
+                if ($this->refs !== [] && preg_match(self::PATTERN_REF_IMAGE, $text, $m, 0, $pos)) {
+                    $tokens = $this->flushBuffer($buffer, $tokens);
+                    $buffer = '';
+                    $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
+                    if (isset($this->refs[$lookupKey])) {
+                        $def = $this->refs[$lookupKey];
+                        if ($this->isSafeUrl($def['href'])) {
+                            $tokens[] = new ImageNode(
+                                src: $def['href'],
+                                alt: $m[1],
+                                title: $def['title'],
+                            );
+                        } else {
+                            $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
+                        }
+                    } else {
+                        $buffer .= $m[0]; // Unresolved reference → literal text
+                    }
+                    $pos += strlen($m[0]);
+                    continue;
+                }
+                // Image shortcut reference: ![alt] (no second bracket pair)
+                if ($this->refs !== [] && ($closePos = strpos($text, ']', $pos + 2)) !== false) {
+                    $alt = substr($text, $pos + 2, $closePos - $pos - 2);
+                    $nextChar = $text[$closePos + 1] ?? '';
+                    if ($nextChar !== '(' && $nextChar !== '[' && $alt !== '') {
+                        $lookupKey = mb_strtolower($alt, 'UTF-8');
+                        if (isset($this->refs[$lookupKey])) {
+                            $def = $this->refs[$lookupKey];
+                            $tokens = $this->flushBuffer($buffer, $tokens);
+                            $buffer = '';
+                            if ($this->isSafeUrl($def['href'])) {
+                                $tokens[] = new ImageNode(
+                                    src: $def['href'],
+                                    alt: $alt,
+                                    title: $def['title'],
+                                );
+                            } else {
+                                $buffer .= substr($text, $pos, $closePos - $pos + 1); // Unsafe src → literal
+                            }
+                            $pos = $closePos + 1;
+                            continue;
+                        }
+                    }
                 }
             }
 
