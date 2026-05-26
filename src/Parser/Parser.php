@@ -12,6 +12,8 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\FootnoteDefinitionNode;
+use PhpMarkdown\Node\Block\FootnotesContainerNode;
 use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
@@ -38,6 +40,9 @@ final class Parser
     /** @var array<string, array{href: string, title: ?string}> */
     private array $linkRefs = [];
 
+    /** @var array<string, array{body: string, number?: int, occurrences?: int}> */
+    private array $footnoteDefs = [];
+
     public function __construct()
     {
         $this->inlineParser = new InlineParser();
@@ -49,9 +54,18 @@ final class Parser
      */
     public function parse(array $tokens): DocumentNode
     {
-        ['refs' => $this->linkRefs, 'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
+        ['refs'   => $this->linkRefs,  'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
+        ['defs'   => $this->footnoteDefs, 'tokens' => $tokens] = $this->extractFootnoteDefinitions($tokens);
 
-        return new DocumentNode($this->parseBlocks($tokens));
+        $blockChildren = $this->parseBlocks($tokens);
+
+        // Build FootnotesContainerNode if any definitions were resolved.
+        $resolvedDefs = $this->buildResolvedDefinitions();
+        if ($resolvedDefs !== []) {
+            $blockChildren[] = new FootnotesContainerNode(definitions: $resolvedDefs);
+        }
+
+        return new DocumentNode($blockChildren);
     }
 
     /**
@@ -78,7 +92,7 @@ final class Parser
             if ($token->type === TokenType::HEADING) {
                 $children[] = new HeadingNode(
                     level: $token->meta['level'],
-                    children: $this->inlineParser->parse($token->content, $this->linkRefs),
+                    children: $this->inlineParser->parse($token->content, $this->linkRefs, $this->footnoteDefs),
                 );
                 $i++;
                 continue;
@@ -170,8 +184,9 @@ final class Parser
     }
 
     /**
-     * Replace any COLUMNS_CONTAINER tokens with PARAGRAPH tokens containing ":::columns"
+     * Replace any COLUMNS_CONTAINER or FOOTNOTE_DEFINITION tokens with PARAGRAPH tokens
      * to enforce flat-only nesting per the story spec.
+     * FOOTNOTE_DEFINITION inside a column is treated as literal text (not a real definition).
      *
      * @param  Token[] $tokens
      * @return Token[]
@@ -179,9 +194,15 @@ final class Parser
     private function flattenColumnsTokens(array $tokens): array
     {
         return array_map(
-            static fn(Token $t): Token => $t->type === TokenType::COLUMNS_CONTAINER
-                ? new Token(TokenType::PARAGRAPH, ':::columns')
-                : $t,
+            static function (Token $t): Token {
+                if ($t->type === TokenType::COLUMNS_CONTAINER) {
+                    return new Token(TokenType::PARAGRAPH, ':::columns');
+                }
+                if ($t->type === TokenType::FOOTNOTE_DEFINITION) {
+                    return new Token(TokenType::PARAGRAPH, $t->content !== '' ? $t->content : '[^' . $t->meta['label'] . ']: ' . $t->meta['body']);
+                }
+                return $t;
+            },
             $tokens,
         );
     }
@@ -196,7 +217,7 @@ final class Parser
         $lastIdx = count($tokens) - 1;
 
         foreach ($tokens as $idx => $token) {
-            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs);
+            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs, $this->footnoteDefs);
             array_push($result, ...$inlineNodes);
 
             if ($idx < $lastIdx) {
@@ -228,7 +249,7 @@ final class Parser
             && $tokens[$i]->meta['ordered'] === $ordered
         ) {
             $itemToken      = $tokens[$i];
-            $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs);
+            $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs, $this->footnoteDefs);
             $i++;
 
             // If the next token is a deeper-level list item, recurse.
@@ -286,7 +307,7 @@ final class Parser
         $rows[] = new TableRowNode(
             cells: array_map(
                 fn(string $cell, int $idx) => new TableCellNode(
-                    children: $this->inlineParser->parse($cell, $this->linkRefs),
+                    children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
                     align: $aligns[$idx] ?? '',
                 ),
                 $headerCells,
@@ -301,7 +322,7 @@ final class Parser
             $rows[] = new TableRowNode(
                 cells: array_map(
                     fn(string $cell, int $idx) => new TableCellNode(
-                        children: $this->inlineParser->parse($cell, $this->linkRefs),
+                        children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
                         align: $aligns[$idx] ?? '',
                     ),
                     $cells,
@@ -370,6 +391,78 @@ final class Parser
     }
 
     /**
+     * Scans tokens for FOOTNOTE_DEFINITION entries, builds the definitions map,
+     * and returns the filtered token list (FOOTNOTE_DEFINITION tokens removed).
+     * Mirrors extractLinkDefinitions(): first definition wins; labels are case-sensitive.
+     *
+     * @param  Token[]  $tokens
+     * @return array{defs: array<string, array{body: string}>, tokens: Token[]}
+     */
+    private function extractFootnoteDefinitions(array $tokens): array
+    {
+        $defs     = [];
+        $filtered = [];
+        foreach ($tokens as $token) {
+            if ($token->type === TokenType::FOOTNOTE_DEFINITION) {
+                $label = $token->meta['label'];
+                // Guard: '__next_number__' is the sentinel key used by InlineParser to track
+                // the running counter. Allowing it as a real label would cause a TypeError
+                // when the counter arithmetic tries to add 1 to an array value.
+                if ($label === '__next_number__') {
+                    $filtered[] = new Token(TokenType::PARAGRAPH, $token->content !== '' ? $token->content : '[^' . $label . ']: ' . $token->meta['body']);
+                    continue;
+                }
+                // First definition wins (mirrors link-def behaviour).
+                if (!isset($defs[$label])) {
+                    $defs[$label] = ['body' => $token->meta['body']];
+                }
+            } else {
+                $filtered[] = $token;
+            }
+        }
+        return ['defs' => $defs, 'tokens' => $filtered];
+    }
+
+    /**
+     * After all inline passes, builds the ordered list of FootnoteDefinitionNode objects
+     * for definitions that were actually referenced in the document.
+     *
+     * @return FootnoteDefinitionNode[]
+     */
+    private function buildResolvedDefinitions(): array
+    {
+        $resolved = [];
+        foreach ($this->footnoteDefs as $entry) {
+            if (!isset($entry['number'])) {
+                continue;
+            }
+            $resolved[] = [
+                'number'      => $entry['number'],
+                'occurrences' => $entry['occurrences'] ?? 1,
+                'body'        => $entry['body'],
+            ];
+        }
+        usort($resolved, fn($a, $b) => $a['number'] <=> $b['number']);
+
+        $nodes = [];
+        foreach ($resolved as $r) {
+            $backLinkIds = [];
+            for ($i = 1; $i <= $r['occurrences']; $i++) {
+                $backLinkIds[] = $i === 1
+                    ? 'fnref-' . $r['number']
+                    : 'fnref-' . $r['number'] . '-' . $i;
+            }
+            $nodes[] = new FootnoteDefinitionNode(
+                number:      $r['number'],
+                // No recursive footnote resolution: parse body with linkRefs only (two args).
+                children:    $this->inlineParser->parse($r['body'], $this->linkRefs),
+                backLinkIds: $backLinkIds,
+            );
+        }
+        return $nodes;
+    }
+
+    /**
      * Recursively builds a nested BlockquoteNode from a flat stream of BLOCKQUOTE tokens.
      *
      * $i is passed by reference so that a level-decrease early-return communicates the
@@ -390,7 +483,7 @@ final class Parser
                 // Level decrease: flush buffer and yield cursor to caller.
                 if ($buffer !== []) {
                     $children[] = new ParagraphNode(
-                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
                     );
                 }
                 return new BlockquoteNode(children: $children);
@@ -409,7 +502,7 @@ final class Parser
 
                 if (!$nextIsCurrentLevel && $buffer !== []) {
                     $children[] = new ParagraphNode(
-                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
                     );
                     $buffer = [];
                 }
@@ -419,7 +512,7 @@ final class Parser
             // $level > $minLevel: flush buffer then recurse.
             if ($buffer !== []) {
                 $children[] = new ParagraphNode(
-                    children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                    children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
                 );
                 $buffer = [];
             }
@@ -441,7 +534,7 @@ final class Parser
         // Flush any remaining buffer at end of token stream.
         if ($buffer !== []) {
             $children[] = new ParagraphNode(
-                children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs),
+                children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
             );
         }
 
