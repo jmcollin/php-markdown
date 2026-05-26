@@ -6,6 +6,7 @@ namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
+use PhpMarkdown\Node\Inline\FootnoteRefNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
@@ -82,20 +83,35 @@ final class InlineParser
      */
     private const PATTERN_ENTITY = '/\G&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/';
 
+    /** Matches an inline footnote reference: [^label] anchored at current position. */
+    private const PATTERN_FOOTNOTE_REF = '/\G\[\^([A-Za-z0-9_-]{1,50})\]/';
+
     /** @var array<string, array{href: string, title: ?string}> */
     private array $refs = [];
 
+    /** @var array<string, array{body: string, number?: int, occurrences?: int}> */
+    private array $footnoteDefinitions = [];
+
     /**
      * @param array<string, array{href: string, title: ?string}> $refs
+     * @param array<string, array{body: string, number?: int, occurrences?: int}> $footnoteDefinitions
+     *        Keyed by raw (case-sensitive) label. Mutated during scan():
+     *        - 'number' int is assigned on first reference encounter.
+     *        - 'occurrences' int is incremented on every encounter.
      * @return InlineNodeInterface[]
      */
-    public function parse(string $text, array $refs = []): array
+    public function parse(string $text, array $refs = [], array &$footnoteDefinitions = []): array
     {
-        $this->refs = $refs;
+        $this->refs               = $refs;
+        $this->footnoteDefinitions = &$footnoteDefinitions;
         try {
             return $this->scan($text, 0);
         } finally {
             $this->refs = [];
+            // Unset the reference to the caller's array before re-initialising the property,
+            // so the caller's array retains the mutations (assigned numbers, occurrence counts).
+            unset($this->footnoteDefinitions);
+            $this->footnoteDefinitions = [];
         }
     }
 
@@ -311,6 +327,36 @@ final class InlineParser
 
             // ── Link: [text](url "title"?) and reference links ───────────────
             if ($char === '[') {
+                // ── Footnote reference: [^label] ─────────────────────────────────
+                // Gate on $text[$pos+1] === '^' to avoid regex overhead on every [.
+                if (isset($text[$pos + 1]) && $text[$pos + 1] === '^') {
+                    if (preg_match(self::PATTERN_FOOTNOTE_REF, $text, $m, 0, $pos)) {
+                        $label = $m[1];
+                        if (isset($this->footnoteDefinitions[$label]) && is_array($this->footnoteDefinitions[$label])) {
+                            // Assign number on first encounter; increment occurrence counter.
+                            if (!isset($this->footnoteDefinitions[$label]['number'])) {
+                                $nextNum = ($this->footnoteDefinitions['__next_number__'] ?? 0) + 1;
+                                $this->footnoteDefinitions[$label]['number']      = $nextNum;
+                                $this->footnoteDefinitions[$label]['occurrences'] = 0;
+                                $this->footnoteDefinitions['__next_number__']     = $nextNum;
+                            }
+                            $this->footnoteDefinitions[$label]['occurrences']++;
+                            $occurrence = $this->footnoteDefinitions[$label]['occurrences'];
+                            $tokens = $this->flushBuffer($buffer, $tokens);
+                            $buffer = '';
+                            $tokens[] = new FootnoteRefNode(
+                                label:      $label,
+                                number:     $this->footnoteDefinitions[$label]['number'],
+                                occurrence: $occurrence,
+                            );
+                            $pos += strlen($m[0]);
+                            continue;
+                        }
+                        // Label not in definitions map — fall through to literal text.
+                    }
+                    // No match or undefined — fall through.
+                }
+
                 // 1a. Angle-bracket URL form: [text](<url> or <url "title">) — checked first.
                 if (preg_match(self::PATTERN_LINK_ANGLE, $text, $m, 0, $pos)) {
                     $tokens = $this->flushBuffer($buffer, $tokens);

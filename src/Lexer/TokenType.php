@@ -19,4 +19,5 @@ enum TokenType
     case LINK_DEFINITION;
     case HTML_BLOCK;
     case COLUMNS_CONTAINER;
+    case FOOTNOTE_DEFINITION;
 }

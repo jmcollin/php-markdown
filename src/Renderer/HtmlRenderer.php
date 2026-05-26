@@ -8,6 +8,8 @@ use PhpMarkdown\Node\Block\BlockquoteNode;
 use PhpMarkdown\Node\Block\ColumnsNode;
 use PhpMarkdown\Node\Block\DocumentNode;
 use PhpMarkdown\Node\Block\FencedCodeNode;
+use PhpMarkdown\Node\Block\FootnoteDefinitionNode;
+use PhpMarkdown\Node\Block\FootnotesContainerNode;
 use PhpMarkdown\Node\Block\IndentedCodeNode;
 use PhpMarkdown\Node\Block\HeadingNode;
 use PhpMarkdown\Node\Block\HorizontalRuleNode;
@@ -22,6 +24,7 @@ use PhpMarkdown\Node\Block\TableRowNode;
 use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
+use PhpMarkdown\Node\Inline\FootnoteRefNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
@@ -88,7 +91,10 @@ final class HtmlRenderer
                 $this->allowRawHtml
                     ? $this->stripInlineAttrs($node->content)
                     : $this->esc($node->content),
-            $node instanceof AutolinkNode      => $this->renderAutolink($node),
+            $node instanceof AutolinkNode           => $this->renderAutolink($node),
+            $node instanceof FootnoteRefNode        => $this->renderFootnoteRef($node),
+            $node instanceof FootnotesContainerNode => $this->renderFootnotesContainer($node),
+            $node instanceof FootnoteDefinitionNode => $this->renderFootnoteDefinition($node),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
@@ -270,6 +276,34 @@ final class HtmlRenderer
             $tag,
         ) ?? $tag;
         return $tag;
+    }
+
+    private function renderFootnoteRef(FootnoteRefNode $node): string
+    {
+        $id = $node->occurrence === 1
+            ? 'fnref-' . $node->number
+            : 'fnref-' . $node->number . '-' . $node->occurrence;
+        return '<sup><a href="#fn-' . $node->number . '" id="' . $id . '">'
+            . $node->number . '</a></sup>';
+    }
+
+    private function renderFootnotesContainer(FootnotesContainerNode $node): string
+    {
+        $items = implode('', array_map(
+            fn(FootnoteDefinitionNode $def) => $this->renderFootnoteDefinition($def),
+            $node->definitions,
+        ));
+        return '<section class="footnotes"><ol>' . $items . '</ol></section>';
+    }
+
+    private function renderFootnoteDefinition(FootnoteDefinitionNode $node): string
+    {
+        $body = $this->renderChildren($node->children);
+        $backLinks = implode(' ', array_map(
+            fn(string $id) => '<a href="#' . $id . '">↩</a>',
+            $node->backLinkIds,
+        ));
+        return '<li id="fn-' . $node->number . '">' . $body . ' ' . $backLinks . '</li>';
     }
 
     private function esc(string $value): string

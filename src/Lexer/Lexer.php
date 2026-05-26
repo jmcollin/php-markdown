@@ -29,6 +29,7 @@ final class Lexer
     private const PATTERN_COLUMNS_CLOSE    = '/^:::$/';
     private const PATTERN_COLUMNS_SEP      = '/^\|\|\|$/';
     private const PATTERN_INDENTED_CODE    = '/^(    |\t)(.*)/s';
+    private const PATTERN_FOOTNOTE_DEF    = '/^\[\^([A-Za-z0-9_-]{1,50})\]:\s+(.+)$/';
 
     /**
      * Block-level HTML tags that trigger HTML_BLOCK detection (CommonMark §4.6).
@@ -98,6 +99,10 @@ final class Lexer
         $inIndentedBlock = false;
         $indentedLines   = [];
         $pendingBlanks   = [];
+
+        $inFootnoteBody     = false;
+        $footnoteBodyLabel  = '';
+        $footnoteBodyLines  = [];
 
         foreach ($lines as $raw) {
             $line = rtrim($raw, "\r");
@@ -242,6 +247,27 @@ final class Lexer
                 continue;
             }
 
+            // Footnote definition multi-line body continuation.
+            // 4-space-indented lines are appended to the current footnote body.
+            // Any other line flushes the accumulated body as a FOOTNOTE_DEFINITION token,
+            // then falls through to process the current line normally.
+            if ($inFootnoteBody) {
+                if (preg_match('/^    (.+)/', $line, $fm)) {
+                    $footnoteBodyLines[] = $fm[1];
+                    continue;
+                }
+                // Non-continuation line: flush accumulated body.
+                $tokens[] = new Token(
+                    TokenType::FOOTNOTE_DEFINITION,
+                    '',
+                    ['label' => $footnoteBodyLabel, 'body' => implode(' ', $footnoteBodyLines)],
+                );
+                $inFootnoteBody    = false;
+                $footnoteBodyLines = [];
+                $footnoteBodyLabel = '';
+                // Fall through to process the current line normally.
+            }
+
             // Capture paragraph-active state before setext promotion may clear it.
             $hadPendingToken = $pendingToken !== null;
 
@@ -335,6 +361,23 @@ final class Lexer
                 continue;
             }
 
+            // A FOOTNOTE_DEFINITION token opens multi-line body accumulation.
+            // Flush any pending setext heading candidate and pending link def first.
+            if ($token->type === TokenType::FOOTNOTE_DEFINITION) {
+                if ($pendingToken !== null) {
+                    $tokens[] = $pendingToken;
+                    $pendingToken = null;
+                }
+                if ($pendingLinkDef !== null) {
+                    $tokens[] = $pendingLinkDef;
+                    $pendingLinkDef = null;
+                }
+                $inFootnoteBody    = true;
+                $footnoteBodyLabel = $token->meta['label'];
+                $footnoteBodyLines = [$token->meta['body']];
+                continue;
+            }
+
             // A plain paragraph line is held as pending to allow setext promotion on the next line.
             if ($token->type === TokenType::PARAGRAPH && ($line !== '' && !ctype_space($line))) {
                 $pendingToken = $token;
@@ -352,6 +395,15 @@ final class Lexer
         // Flush any remaining pending token
         if ($pendingToken !== null) {
             $tokens[] = $pendingToken;
+        }
+
+        // Flush any in-progress footnote definition body
+        if ($inFootnoteBody && $footnoteBodyLines !== []) {
+            $tokens[] = new Token(
+                TokenType::FOOTNOTE_DEFINITION,
+                '',
+                ['label' => $footnoteBodyLabel, 'body' => implode(' ', $footnoteBodyLines)],
+            );
         }
 
         // Unclosed HTML block at end of input — emit what was collected.
@@ -452,6 +504,16 @@ final class Lexer
             if (preg_match(self::PATTERN_TABLE_ROW, $line)) {
                 return new Token(TokenType::TABLE_ROW, $line);
             }
+        }
+
+        // Footnote definition: [^label]: body — must run before LINK_DEFINITION
+        // because [^label]: body also matches PATTERN_LINK_DEFINITION (label=[^label], href=body).
+        if (preg_match(self::PATTERN_FOOTNOTE_DEF, $line, $m)) {
+            return new Token(
+                TokenType::FOOTNOTE_DEFINITION,
+                $line,
+                ['label' => $m[1], 'body' => $m[2]],
+            );
         }
 
         // URL validation is intentionally deferred to InlineParser::isSafeUrl() at resolution time.
