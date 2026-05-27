@@ -17,7 +17,7 @@ final class Lexer
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
-    private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_HORIZONTAL_RULE  = '/^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/';
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
     private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';

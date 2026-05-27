@@ -179,6 +179,58 @@ final class LexerTest extends TestCase
         }
     }
 
+    /**
+     * CommonMark §4.1 — spaces between characters are allowed in thematic breaks.
+     *
+     * @dataProvider provideSpacedThematicBreaks
+     */
+    public function testHorizontalRuleWithSpaces(string $input): void
+    {
+        $tokens = $this->lexer->tokenize($input);
+        $this->assertSame(TokenType::HORIZONTAL_RULE, $tokens[0]->type, "HR: {$input}");
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideSpacedThematicBreaks(): array
+    {
+        return [
+            'spaced dashes'          => ['- - -'],
+            'spaced asterisks'       => ['* * *'],
+            'spaced underscores'     => ['_ _ _'],
+            'four spaced dashes'     => ['- - - -'],
+            'uneven spacing'         => ['--  -'],
+            'trailing spaces'        => ['- - -   '],
+        ];
+    }
+
+    /**
+     * CommonMark §4.1 — mixed characters or fewer than 3 are NOT thematic breaks.
+     *
+     * @dataProvider provideNotThematicBreaks
+     */
+    public function testNotHorizontalRule(string $input): void
+    {
+        $tokens = $this->lexer->tokenize($input);
+        $this->assertNotSame(TokenType::HORIZONTAL_RULE, $tokens[0]->type, "Not HR: {$input}");
+    }
+
+    /** @return array<string, array{string}> */
+    public static function provideNotThematicBreaks(): array
+    {
+        return [
+            'mixed chars'    => ['- * -'],
+            'only two chars' => ['- -'],
+        ];
+    }
+
+    /** Setext H2 must not be confused with HR — paragraph followed by --- is a heading. */
+    public function testSetextH2NotConvertedToHorizontalRule(): void
+    {
+        $tokens = $this->lexer->tokenize("Some text\n---");
+        $this->assertSame(TokenType::HEADING, $tokens[0]->type);
+        $this->assertSame(2, $tokens[0]->meta['level']);
+    }
+
     public function testBlankLineProcducesBlankToken(): void
     {
         $tokens = $this->lexer->tokenize("text\n\ntext2");
