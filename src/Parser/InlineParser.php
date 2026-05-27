@@ -111,7 +111,7 @@ final class InlineParser
         // from where the previous one left off (footnotes span multiple paragraphs).
         $this->footnoteNextNumber = 0;
         foreach ($this->footnoteDefinitions as $def) {
-            if (is_array($def) && isset($def['number']) && $def['number'] > $this->footnoteNextNumber) {
+            if (isset($def['number']) && $def['number'] > $this->footnoteNextNumber) {
                 $this->footnoteNextNumber = $def['number'];
             }
         }
