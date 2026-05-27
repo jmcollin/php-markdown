@@ -60,7 +60,7 @@ if (!isset($data['markdown']) || !is_string($data['markdown'])) {
 }
 
 try {
-    $parser = new MarkdownParser(maxBytes: 65536);
+    $parser = new MarkdownParser(maxBytes: 65536, linkTarget: '_blank', linkRel: 'noopener noreferrer');
     $html = $parser->parse($data['markdown']);
 } catch (ParseException $e) {
     http_response_code(413);

@@ -28,19 +28,21 @@ final class MarkdownParser
 
     private readonly Lexer $lexer;
     private readonly Parser $parser;
-    private readonly HtmlRenderer $renderer;
     private readonly FrontMatterParser $frontMatter;
     private readonly int $maxBytes;
     private readonly NormalizerInterface $normalizer;
 
-    public function __construct(int $maxBytes = self::DEFAULT_MAX_BYTES, ?NormalizerInterface $normalizer = null)
-    {
+    public function __construct(
+        int $maxBytes = self::DEFAULT_MAX_BYTES,
+        ?NormalizerInterface $normalizer = null,
+        private readonly ?string $linkTarget = null,
+        private readonly ?string $linkRel = null,
+    ) {
         if ($maxBytes < 1) {
             throw new \InvalidArgumentException('maxBytes must be at least 1.');
         }
         $this->lexer       = new Lexer();
         $this->parser      = new Parser();
-        $this->renderer    = new HtmlRenderer();
         $this->frontMatter = new FrontMatterParser();
         $this->maxBytes    = $maxBytes;
         $this->normalizer  = $normalizer ?? new IcuNormalizer();
@@ -76,9 +78,8 @@ final class MarkdownParser
         $extracted = $this->frontMatter->extract($markdown);
         $tokens    = $this->lexer->tokenize($extracted['markdown']);
         $ast       = $this->parser->parse($tokens);
-        $renderer  = $allowRawHtml ? new HtmlRenderer(true) : $this->renderer;
 
-        return $renderer->render($ast);
+        return $this->makeRenderer($allowRawHtml)->render($ast);
     }
 
     /**
@@ -96,11 +97,19 @@ final class MarkdownParser
         $extracted = $this->frontMatter->extract($markdown);
         $tokens    = $this->lexer->tokenize($extracted['markdown']);
         $ast       = $this->parser->parse($tokens);
-        $renderer  = $allowRawHtml ? new HtmlRenderer(true) : $this->renderer;
 
         return [
-            'html' => $renderer->render($ast),
+            'html' => $this->makeRenderer($allowRawHtml)->render($ast),
             'meta' => $extracted['meta'],
         ];
+    }
+
+    private function makeRenderer(bool $allowRawHtml): HtmlRenderer
+    {
+        return new HtmlRenderer(
+            allowRawHtml: $allowRawHtml,
+            linkTarget: $this->linkTarget,
+            linkRel: $this->linkRel,
+        );
     }
 }

@@ -47,6 +47,8 @@ final class HtmlRenderer
 {
     public function __construct(
         private readonly bool $allowRawHtml = false,
+        private readonly ?string $linkTarget = null,
+        private readonly ?string $linkRel = null,
         private readonly HtmlSanitizer $sanitizer = new HtmlSanitizer(),
     ) {
     }
@@ -190,10 +192,10 @@ final class HtmlRenderer
 
     private function renderLink(LinkNode $node): string
     {
-        $titleAttr = $node->title !== null
-            ? ' title="' . $this->esc($node->title) . '"'
-            : '';
-        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . '>'
+        $titleAttr  = $node->title !== null ? ' title="' . $this->esc($node->title) . '"' : '';
+        $targetAttr = $this->linkTarget !== null ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
+        $relAttr    = $this->linkRel !== null ? ' rel="' . $this->esc($this->linkRel) . '"' : '';
+        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . $targetAttr . $relAttr . '>'
             . $this->renderChildren($node->children)
             . '</a>';
     }
@@ -211,8 +213,10 @@ final class HtmlRenderer
         $href = $node->isEmail
             ? 'mailto:' . $this->esc($node->url)
             : $this->esc($node->url);
-        $text = $this->esc($node->url);
-        return "<a href=\"{$href}\">{$text}</a>";
+        $text       = $this->esc($node->url);
+        $targetAttr = (!$node->isEmail && $this->linkTarget !== null) ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
+        $relAttr    = (!$node->isEmail && $this->linkRel !== null) ? ' rel="' . $this->esc($this->linkRel) . '"' : '';
+        return "<a href=\"{$href}\"{$targetAttr}{$relAttr}>{$text}</a>";
     }
 
     private function renderTable(TableNode $node): string

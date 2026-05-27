@@ -308,7 +308,7 @@ echo $meta['version']; // 2.0
      window.parent and parent DOM. Safe for script execution of the vendored Mermaid.js.
      The vendor script is served with Access-Control-Allow-Origin:* (.htaccess) so SRI
      enforcement works from the opaque-origin frame. -->
-<iframe id="preview" sandbox="allow-scripts"></iframe>
+<iframe id="preview" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
 <button type="submit" id="submit-btn">Render</button>
 </form>
 <script>
@@ -327,7 +327,7 @@ echo $meta['version']; // 2.0
   // securityLevel:'strict' required (CVE-2021-43119; never use 'loose').
   // <base href="/"> resolves /vendor/... relative to server root inside srcdoc.
   var MERMAID_SNIPPET =
-    '<base href="/">' +
+    '<base href="/" target="_blank">' +
     '<script src="/vendor/mermaid.min.js"' +
     ' integrity="sha384-1CMXl090wj8Dd6YfnzSQUOgWbE6suWCaenYG7pox5AX7apTpY3PmJMeS2oPql4Gk"' +
     ' crossorigin="anonymous"><\/script>' +
