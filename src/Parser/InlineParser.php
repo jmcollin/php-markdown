@@ -107,6 +107,14 @@ final class InlineParser
     {
         $this->refs               = $refs;
         $this->footnoteDefinitions = &$footnoteDefinitions;
+        // Restore counter to max already-assigned number so each parse() call continues
+        // from where the previous one left off (footnotes span multiple paragraphs).
+        $this->footnoteNextNumber = 0;
+        foreach ($this->footnoteDefinitions as $def) {
+            if (isset($def['number']) && $def['number'] > $this->footnoteNextNumber) {
+                $this->footnoteNextNumber = $def['number'];
+            }
+        }
         try {
             return $this->scan($text, 0);
         } finally {

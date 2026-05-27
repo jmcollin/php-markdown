@@ -77,6 +77,22 @@ final class FootnoteTest extends TestCase
         );
     }
 
+    /** AC-2b: References in separate paragraphs get distinct numbers (counter must not reset between paragraphs). */
+    public function testAppearanceOrderNumberingAcrossParagraphs(): void
+    {
+        $md = "First[^a].\n\nSecond[^b] and again[^b].\n\n[^a]: Def A.\n[^b]: Def B.";
+        $html = $this->renderMarkdown($md);
+        $this->assertSame(
+            '<p>First<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            . '<p>Second<sup><a href="#fn-2" id="fnref-2">2</a></sup> and again<sup><a href="#fn-2" id="fnref-2-2">2</a></sup>.</p>'
+            . '<section class="footnotes"><ol>'
+            . '<li id="fn-1">Def A. <a href="#fnref-1">↩</a></li>'
+            . '<li id="fn-2">Def B. <a href="#fnref-2">↩</a> <a href="#fnref-2-2">↩</a></li>'
+            . '</ol></section>',
+            $html
+        );
+    }
+
     // ─── AC-3: Same label twice — two back-links ─────────────────────────────
 
     /** AC-3: Same label referenced twice yields same number and two back-link anchors. */
