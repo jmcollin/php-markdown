@@ -218,7 +218,7 @@ const { html } = await res.json();
 
 ```mermaid
 flowchart LR
-    A[Lexer] -->|Token[]| B[Parser]
+    A[Lexer] -->|"Token[]"| B[Parser]
     B -->|DocumentNode| C[Renderer]
     C -->|string| D[HTML output]
 ```
