@@ -12,7 +12,7 @@ namespace PhpMarkdown\Lexer;
  */
 final class Lexer
 {
-    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.+)$/';
+    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.*)$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
