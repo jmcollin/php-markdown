@@ -26,6 +26,7 @@ use PhpMarkdown\Node\Inline\CodeNode;
 use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\FootnoteRefNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
+use PhpMarkdown\Node\Inline\SoftBreakNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
@@ -76,6 +77,7 @@ final class HtmlRenderer
                     ? $this->sanitizer->sanitize($node->content) . "\n"
                     : $this->esc($node->content) . "\n",
             $node instanceof HardBreakNode    => "<br />\n",
+            $node instanceof SoftBreakNode    => "\n",
             // HTML entities pass through verbatim — validated by InlineParser, no esc() needed.
             $node instanceof HtmlEntityNode   => $node->entity,
             $node instanceof TextNode         => $this->esc($node->text),

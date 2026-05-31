@@ -25,7 +25,6 @@ use PhpMarkdown\Node\Block\TableCellNode;
 use PhpMarkdown\Node\Block\TableNode;
 use PhpMarkdown\Node\Block\TableRowNode;
 use PhpMarkdown\Node\Inline\HardBreakNode;
-use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\InlineNodeInterface;
 
 /**
@@ -215,16 +214,27 @@ final class Parser
     {
         $result = [];
         $lastIdx = count($tokens) - 1;
+        $group = [];
 
         foreach ($tokens as $idx => $token) {
-            $inlineNodes = $this->inlineParser->parse($token->content, $this->linkRefs, $this->footnoteDefs);
-            array_push($result, ...$inlineNodes);
+            $content = preg_replace('/^(?:[ ]{1,3}|\t)/', '', $token->content) ?? $token->content;
+            $isHardBreak = ($token->meta['hard_break'] ?? false) === true;
+            $isLast = ($idx === $lastIdx);
 
-            if ($idx < $lastIdx) {
-                // Hard break on last token is stripped per CommonMark §6.7.
-                $result[] = ($token->meta['hard_break'] ?? false) === true
-                    ? new HardBreakNode()
-                    : new TextNode(' ');
+            if (!$isLast && !$isHardBreak) {
+                $content = rtrim($content, ' ');
+            }
+
+            $group[] = $content;
+
+            if ($isHardBreak || $isLast) {
+                $nodes = $this->inlineParser->parse(implode("\n", $group), $this->linkRefs, $this->footnoteDefs);
+                array_push($result, ...$nodes);
+                $group = [];
+
+                if ($isHardBreak && !$isLast) {
+                    $result[] = new HardBreakNode();
+                }
             }
         }
 
