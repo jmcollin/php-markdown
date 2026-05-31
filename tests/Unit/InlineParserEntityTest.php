@@ -32,18 +32,20 @@ final class InlineParserEntityTest extends TestCase
     {
         $nodes = $this->parser->parse('&#160;');
 
+        // &#160; = U+00A0 (non-breaking space) decoded to literal UTF-8 \xC2\xA0.
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(HtmlEntityNode::class, $nodes[0]);
-        $this->assertSame('&#160;', $nodes[0]->entity);
+        $this->assertSame("\xC2\xA0", $nodes[0]->entity);
     }
 
     public function testHexEntityProducesHtmlEntityNode(): void
     {
         $nodes = $this->parser->parse('&#x00A0;');
 
+        // &#x00A0; = U+00A0 (non-breaking space) decoded to literal UTF-8 \xC2\xA0.
         $this->assertCount(1, $nodes);
         $this->assertInstanceOf(HtmlEntityNode::class, $nodes[0]);
-        $this->assertSame('&#x00A0;', $nodes[0]->entity);
+        $this->assertSame("\xC2\xA0", $nodes[0]->entity);
     }
 
     public function testBareAmpersandProducesTextNode(): void
@@ -66,22 +68,24 @@ final class InlineParserEntityTest extends TestCase
         }
     }
 
-    public function testNullCodepointEntityProducesTextNode(): void
+    public function testNullCodepointEntityProducesReplacementCharNode(): void
     {
         $nodes = $this->parser->parse('&#0;');
 
-        foreach ($nodes as $node) {
-            $this->assertNotInstanceOf(HtmlEntityNode::class, $node);
-        }
+        // &#0; (NUL) is mapped to U+FFFD per CommonMark §2.5 / HTML5 §8.1.4.
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(HtmlEntityNode::class, $nodes[0]);
+        $this->assertSame("\u{FFFD}", $nodes[0]->entity);
     }
 
-    public function testSurrogateEntityProducesTextNode(): void
+    public function testSurrogateEntityProducesReplacementCharNode(): void
     {
         $nodes = $this->parser->parse('&#xD800;');
 
-        foreach ($nodes as $node) {
-            $this->assertNotInstanceOf(HtmlEntityNode::class, $node);
-        }
+        // Surrogate codepoints are mapped to U+FFFD per CommonMark §2.5 / HTML5 §8.1.4.
+        $this->assertCount(1, $nodes);
+        $this->assertInstanceOf(HtmlEntityNode::class, $nodes[0]);
+        $this->assertSame("\u{FFFD}", $nodes[0]->entity);
     }
 
     public function testCodeSpanContentIsNotScannedForEntities(): void
