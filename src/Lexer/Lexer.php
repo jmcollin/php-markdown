@@ -84,7 +84,7 @@ final class Lexer
         $fencedLines = [];
         $fenceChar = '';
         $fenceLength = 0;
-        $pendingToken = null;
+        $pendingLines = [];
         $pendingLinkDef = null; // LINK_DEFINITION token awaiting a possible next-line title
 
         $inHtmlBlock = false;
@@ -149,10 +149,10 @@ final class Lexer
 
             if ($inColumnsBlock) {
                 if (preg_match(self::PATTERN_COLUMNS_CLOSE, $line)) {
-                    if ($pendingToken !== null) {
-                        $tokens[] = $pendingToken;
-                        $pendingToken = null;
+                    foreach ($pendingLines as $pt) {
+                        $tokens[] = $pt;
                     }
+                    $pendingLines = [];
                     $tokens[] = new Token(
                         TokenType::COLUMNS_CONTAINER,
                         '',
@@ -176,10 +176,10 @@ final class Lexer
             }
 
             if (preg_match(self::PATTERN_COLUMNS_OPEN, $line)) {
-                if ($pendingToken !== null) {
-                    $tokens[] = $pendingToken;
-                    $pendingToken = null;
+                foreach ($pendingLines as $pt) {
+                    $tokens[] = $pt;
                 }
+                $pendingLines = [];
                 $inColumnsBlock    = true;
                 $columnsSepFound   = false;
                 $columnsLeftLines  = [];
@@ -189,10 +189,10 @@ final class Lexer
 
             if ($inFencedBlock) {
                 if (preg_match('/^ {0,3}' . preg_quote($fenceChar, '/') . '{' . $fenceLength . ',}\s*$/', $line)) {
-                    if ($pendingToken !== null) {
-                        $tokens[] = $pendingToken;
-                        $pendingToken = null;
+                    foreach ($pendingLines as $pt) {
+                        $tokens[] = $pt;
                     }
+                    $pendingLines = [];
                     $tokens[] = new Token(
                         TokenType::FENCED_CODE,
                         implode("\n", $fencedLines),
@@ -210,10 +210,10 @@ final class Lexer
             }
 
             if (preg_match(self::PATTERN_FENCED_OPEN, $line, $m)) {
-                if ($pendingToken !== null) {
-                    $tokens[] = $pendingToken;
-                    $pendingToken = null;
+                foreach ($pendingLines as $pt) {
+                    $tokens[] = $pt;
                 }
+                $pendingLines = [];
                 $inFencedBlock  = true;
                 $fencedLanguage = $m[2];
                 $fencedLines    = [];
@@ -226,10 +226,10 @@ final class Lexer
             // Must run before setext/paragraph logic so that block-level HTML tags
             // are not consumed as paragraphs.
             if (preg_match($this->patternHtmlBlockStart, $line)) {
-                if ($pendingToken !== null) {
-                    $tokens[] = $pendingToken;
-                    $pendingToken = null;
+                foreach ($pendingLines as $pt) {
+                    $tokens[] = $pt;
                 }
+                $pendingLines = [];
                 // Detect whether this is an HTML comment opener.
                 $isCommentStart = str_starts_with(ltrim($line), '<!--');
                 $isCommentClosed = $isCommentStart && str_contains($line, '-->');
@@ -269,22 +269,22 @@ final class Lexer
             }
 
             // Capture paragraph-active state before setext promotion may clear it.
-            $hadPendingToken = $pendingToken !== null;
+            $hadPendingLines = $pendingLines !== [];
 
-            // Setext heading detection: a pending text line followed by === or ---
-            if ($pendingToken !== null) {
+            // Setext heading detection: pending text lines followed by === or ---
+            if ($pendingLines !== []) {
                 if (preg_match(self::PATTERN_SETEXT_H1, $line)) {
-                    $tokens[] = new Token(TokenType::HEADING, $pendingToken->content, ['level' => 1]);
-                    $pendingToken = null;
+                    $content = implode(' ', array_map(fn(Token $t) => $t->content, $pendingLines));
+                    $tokens[] = new Token(TokenType::HEADING, $content, ['level' => 1]);
+                    $pendingLines = [];
                     continue;
                 }
                 if (preg_match(self::PATTERN_SETEXT_H2, $line)) {
-                    $tokens[] = new Token(TokenType::HEADING, $pendingToken->content, ['level' => 2]);
-                    $pendingToken = null;
+                    $content = implode(' ', array_map(fn(Token $t) => $t->content, $pendingLines));
+                    $tokens[] = new Token(TokenType::HEADING, $content, ['level' => 2]);
+                    $pendingLines = [];
                     continue;
                 }
-                $tokens[] = $pendingToken;
-                $pendingToken = null;
             }
 
             // Multiline link ref title (CommonMark §4.7): a LINK_DEFINITION with no title
@@ -342,7 +342,7 @@ final class Lexer
             // Start new indented code block (only when no paragraph was active,
             // and only when the line is not a list item — list items with leading spaces
             // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
-            if (!$hadPendingToken
+            if (!$hadPendingLines
                 && preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
                 && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
                 && !preg_match(self::PATTERN_ORDERED_LIST, $line)
@@ -364,11 +364,10 @@ final class Lexer
             // A FOOTNOTE_DEFINITION token opens multi-line body accumulation.
             // Flush any pending setext heading candidate and pending link def first.
             if ($token->type === TokenType::FOOTNOTE_DEFINITION) {
-                /** @psalm-suppress TypeDoesNotContainType @phpstan-ignore notIdentical.alwaysFalse */
-                if ($pendingToken !== null) {
-                    $tokens[] = $pendingToken;
-                    $pendingToken = null;
+                foreach ($pendingLines as $pt) {
+                    $tokens[] = $pt;
                 }
+                $pendingLines = [];
                 /** @psalm-suppress TypeDoesNotContainType @phpstan-ignore notIdentical.alwaysFalse */
                 if ($pendingLinkDef !== null) {
                     $tokens[] = $pendingLinkDef;
@@ -382,10 +381,14 @@ final class Lexer
 
             // A plain paragraph line is held as pending to allow setext promotion on the next line.
             if ($token->type === TokenType::PARAGRAPH && ($line !== '' && !ctype_space($line))) {
-                $pendingToken = $token;
+                $pendingLines[] = $token;
                 continue;
             }
 
+            foreach ($pendingLines as $pt) {
+                $tokens[] = $pt;
+            }
+            $pendingLines = [];
             $tokens[] = $token;
         }
 
@@ -394,9 +397,9 @@ final class Lexer
             $tokens[] = $pendingLinkDef;
         }
 
-        // Flush any remaining pending token
-        if ($pendingToken !== null) {
-            $tokens[] = $pendingToken;
+        // Flush any remaining pending lines
+        foreach ($pendingLines as $pt) {
+            $tokens[] = $pt;
         }
 
         // Flush any in-progress footnote definition body
