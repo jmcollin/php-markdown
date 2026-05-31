@@ -108,7 +108,7 @@ final class IndentedCodeBlockTest extends TestCase
     {
         $html = $this->render('    hello world');
 
-        $this->assertSame('<pre><code>hello world' . "\n" . '</code></pre>', $html);
+        $this->assertSame('<pre><code>hello world' . "\n" . "</code></pre>\n", $html);
     }
 
     public function testConsecutiveIndentedLinesFormSingleBlock(): void
@@ -124,14 +124,14 @@ final class IndentedCodeBlockTest extends TestCase
     {
         $html = $this->render("    first\n\n    second");
 
-        $this->assertSame('<pre><code>first' . "\n\n" . 'second' . "\n" . '</code></pre>', $html);
+        $this->assertSame('<pre><code>first' . "\n\n" . 'second' . "\n" . "</code></pre>\n", $html);
     }
 
     public function testTrailingBlankLinesInsideBlockStripped(): void
     {
         $html = $this->render("    content\n\n\n");
 
-        $this->assertSame('<pre><code>content' . "\n" . '</code></pre>', $html);
+        $this->assertSame('<pre><code>content' . "\n" . "</code></pre>\n", $html);
     }
 
     public function testHtmlCharactersEscapedInContent(): void
@@ -190,7 +190,7 @@ final class IndentedCodeBlockTest extends TestCase
         // AC-04: 5 spaces → 4 stripped, 1 space remains in content.
         $html = $this->render('     foo');
 
-        $this->assertSame('<pre><code> foo' . "\n" . '</code></pre>', $html);
+        $this->assertSame('<pre><code> foo' . "\n" . "</code></pre>\n", $html);
     }
 
     public function testNoClassAttributeOnCodeElement(): void
@@ -199,6 +199,6 @@ final class IndentedCodeBlockTest extends TestCase
         $html = $this->render('    php');
 
         $this->assertStringNotContainsString('class=', $html);
-        $this->assertSame('<pre><code>php' . "\n" . '</code></pre>', $html);
+        $this->assertSame('<pre><code>php' . "\n" . "</code></pre>\n", $html);
     }
 }

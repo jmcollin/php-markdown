@@ -36,7 +36,7 @@ final class EmphasisDelimiterStackTest extends TestCase
         $para     = new ParagraphNode($nodes);
         $document = new DocumentNode([$para]);
         $html     = $this->renderer->render($document);
-        return preg_replace('/^<p>(.*)<\/p>$/s', '$1', $html) ?? $html;
+        return preg_replace('/^<p>(.*)<\/p>\n?$/s', '$1', $html) ?? $html;
     }
 
     // ── Basic emphasis and strong ─────────────────────────────────────────────

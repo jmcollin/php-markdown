@@ -31,21 +31,21 @@ final class RendererEntityTest extends TestCase
         $out = $this->render([new ParagraphNode([new HtmlEntityNode('&amp;')])]);
 
         // Must be &amp; exactly — no double-escaping to &amp;amp;
-        $this->assertSame('<p>&amp;</p>', $out);
+        $this->assertSame("<p>&amp;</p>\n", $out);
     }
 
     public function testHtmlEntityNodeLtRenderedVerbatim(): void
     {
         $out = $this->render([new ParagraphNode([new HtmlEntityNode('&lt;')])]);
 
-        $this->assertSame('<p>&lt;</p>', $out);
+        $this->assertSame("<p>&lt;</p>\n", $out);
     }
 
     public function testHtmlEntityNodeHexRenderedVerbatim(): void
     {
         $out = $this->render([new ParagraphNode([new HtmlEntityNode('&#x00A0;')])]);
 
-        $this->assertSame('<p>&#x00A0;</p>', $out);
+        $this->assertSame("<p>&#x00A0;</p>\n", $out);
     }
 
     public function testTextNodeBareAmpersandIsEscaped(): void
@@ -53,6 +53,6 @@ final class RendererEntityTest extends TestCase
         // Regression guard: TextNode('a & b') must still produce a &amp; b.
         $out = $this->render([new ParagraphNode([new TextNode('a & b')])]);
 
-        $this->assertSame('<p>a &amp; b</p>', $out);
+        $this->assertSame("<p>a &amp; b</p>\n", $out);
     }
 }

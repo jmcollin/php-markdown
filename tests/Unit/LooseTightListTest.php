@@ -56,9 +56,9 @@ final class LooseTightListTest extends TestCase
         $html = $this->render("- foo\n\n- bar\n\n- baz");
 
         $this->assertStringContainsString('<ul>', $html);
-        $this->assertStringContainsString('<li><p>foo</p></li>', $html);
-        $this->assertStringContainsString('<li><p>bar</p></li>', $html);
-        $this->assertStringContainsString('<li><p>baz</p></li>', $html);
+        $this->assertStringContainsString("<li>\n<p>foo</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>bar</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>baz</p>\n</li>", $html);
     }
 
     // -------------------------------------------------------------------------
@@ -71,9 +71,9 @@ final class LooseTightListTest extends TestCase
         $html = $this->render("- alpha\n- beta\n\n- gamma");
 
         // All three items must be wrapped in <p>.
-        $this->assertStringContainsString('<li><p>alpha</p></li>', $html);
-        $this->assertStringContainsString('<li><p>beta</p></li>', $html);
-        $this->assertStringContainsString('<li><p>gamma</p></li>', $html);
+        $this->assertStringContainsString("<li>\n<p>alpha</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>beta</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>gamma</p>\n</li>", $html);
     }
 
     // -------------------------------------------------------------------------
@@ -100,9 +100,9 @@ final class LooseTightListTest extends TestCase
         $html = $this->render("1. one\n\n2. two\n\n3. three");
 
         $this->assertStringContainsString('<ol>', $html);
-        $this->assertStringContainsString('<li><p>one</p></li>', $html);
-        $this->assertStringContainsString('<li><p>two</p></li>', $html);
-        $this->assertStringContainsString('<li><p>three</p></li>', $html);
+        $this->assertStringContainsString("<li>\n<p>one</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>two</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>three</p>\n</li>", $html);
     }
 
     // -------------------------------------------------------------------------
@@ -183,9 +183,9 @@ final class LooseTightListTest extends TestCase
         // the whole list loose, so x must also be wrapped in <p>.
         $html = $this->render("- x\n- y\n\n- z");
 
-        $this->assertStringContainsString('<li><p>x</p></li>', $html);
-        $this->assertStringContainsString('<li><p>y</p></li>', $html);
-        $this->assertStringContainsString('<li><p>z</p></li>', $html);
+        $this->assertStringContainsString("<li>\n<p>x</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>y</p>\n</li>", $html);
+        $this->assertStringContainsString("<li>\n<p>z</p>\n</li>", $html);
     }
 
     // -------------------------------------------------------------------------
@@ -239,7 +239,7 @@ final class LooseTightListTest extends TestCase
 
         $html = $this->renderer->render($doc);
 
-        $this->assertStringContainsString('<li><p>hello</p></li>', $html);
+        $this->assertStringContainsString("<li>\n<p>hello</p>\n</li>", $html);
     }
 
     // -------------------------------------------------------------------------

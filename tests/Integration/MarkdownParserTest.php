@@ -74,7 +74,7 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringContainsString('<strong>bold</strong>', $html);
         $this->assertMatchesRegularExpression('/<ul>\s*<li>item<\/li>\s*<\/ul>/', $html);
         $this->assertStringContainsString('<blockquote>', $html);
-        $this->assertStringContainsString('<hr>', $html);
+        $this->assertStringContainsString('<hr />', $html);
     }
 
     // ── Guard: input validation ───────────────────────────────────────────────
@@ -238,7 +238,7 @@ final class MarkdownParserTest extends TestCase
         $md = "- a\n  - b\n  - c\n- d";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>', $html);
+        $this->assertSame("<ul>\n<li>a<ul>\n<li>b</li>\n<li>c</li>\n</ul>\n</li>\n<li>d</li>\n</ul>\n", $html);
     }
 
     public function testThreeLevelNesting(): void
@@ -246,7 +246,7 @@ final class MarkdownParserTest extends TestCase
         $md = "- a\n  - b\n    - c";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>', $html);
+        $this->assertSame("<ul>\n<li>a<ul>\n<li>b<ul>\n<li>c</li>\n</ul>\n</li>\n</ul>\n</li>\n</ul>\n", $html);
     }
 
     public function testMixedNestingTypes(): void
@@ -254,7 +254,7 @@ final class MarkdownParserTest extends TestCase
         $md = "1. first\n   - nested\n2. second";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li><li>second</li></ol>', $html);
+        $this->assertSame("<ol>\n<li>first<ul>\n<li>nested</li>\n</ul>\n</li>\n<li>second</li>\n</ol>\n", $html);
     }
 
     public function testFlatListUnchanged(): void
@@ -262,7 +262,7 @@ final class MarkdownParserTest extends TestCase
         $md = "- a\n- b\n- c";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ul><li>a</li><li>b</li><li>c</li></ul>', $html);
+        $this->assertSame("<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>\n", $html);
     }
 
     public function testInlineContentInNestedItem(): void
@@ -271,7 +271,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<ul><li><strong>bold</strong><ul><li><em>em</em></li></ul></li></ul>',
+            "<ul>\n<li><strong>bold</strong><ul>\n<li><em>em</em></li>\n</ul>\n</li>\n</ul>\n",
             $html
         );
     }
@@ -282,7 +282,7 @@ final class MarkdownParserTest extends TestCase
         $md = "- top\n" . str_repeat(' ', 20) . "- deep";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ul><li>top<ul><li>deep</li></ul></li></ul>', $html);
+        $this->assertSame("<ul>\n<li>top<ul>\n<li>deep</li>\n</ul>\n</li>\n</ul>\n", $html);
     }
 
     public function testUlFollowedByOlAtSameDepthProducesTwoSeparateLists(): void
@@ -292,7 +292,7 @@ final class MarkdownParserTest extends TestCase
         $md = "- ul item\n1. ol item";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<ul><li>ul item</li></ul><ol><li>ol item</li></ol>', $html);
+        $this->assertSame("<ul>\n<li>ul item</li>\n</ul>\n<ol>\n<li>ol item</li>\n</ol>\n", $html);
     }
 
     public function testDepthCapAt32DoesNotCrashAndProducesTwoLists(): void
@@ -325,7 +325,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>outer again</p></blockquote>',
+            "<blockquote>\n<p>outer</p>\n<blockquote>\n<p>inner</p>\n</blockquote>\n<p>outer again</p>\n</blockquote>\n",
             $html,
         );
     }
@@ -336,7 +336,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<blockquote><blockquote><blockquote><p>triple</p></blockquote></blockquote></blockquote>',
+            "<blockquote>\n<blockquote>\n<blockquote>\n<p>triple</p>\n</blockquote>\n</blockquote>\n</blockquote>\n",
             $html,
         );
     }
@@ -347,7 +347,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<blockquote><p>a</p><blockquote><p>b</p></blockquote><p>c</p><blockquote><p>d</p></blockquote></blockquote>',
+            "<blockquote>\n<p>a</p>\n<blockquote>\n<p>b</p>\n</blockquote>\n<p>c</p>\n<blockquote>\n<p>d</p>\n</blockquote>\n</blockquote>\n",
             $html,
         );
     }
@@ -379,7 +379,7 @@ final class MarkdownParserTest extends TestCase
         $md = "> line one\n> line two";
         $html = $this->parser->parse($md);
 
-        $this->assertSame('<blockquote><p>line one line two</p></blockquote>', $html);
+        $this->assertSame("<blockquote>\n<p>line one line two</p>\n</blockquote>\n", $html);
     }
 
     public function testLevelSkipOneToThree(): void
@@ -389,7 +389,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<blockquote><p>a</p><blockquote><blockquote><p>c</p></blockquote></blockquote></blockquote>',
+            "<blockquote>\n<p>a</p>\n<blockquote>\n<blockquote>\n<p>c</p>\n</blockquote>\n</blockquote>\n</blockquote>\n",
             $html,
         );
     }
@@ -401,7 +401,7 @@ final class MarkdownParserTest extends TestCase
         $html = $this->parser->parse($md);
 
         $this->assertSame(
-            '<blockquote><p>quoted</p></blockquote><p>plain paragraph</p>',
+            "<blockquote>\n<p>quoted</p>\n</blockquote>\n<p>plain paragraph</p>\n",
             $html,
         );
     }
@@ -416,7 +416,7 @@ final class MarkdownParserTest extends TestCase
 
         // Two separate top-level blockquotes (blank line resets context).
         $this->assertSame(
-            '<blockquote><p>first</p></blockquote><blockquote><p>second</p></blockquote>',
+            "<blockquote>\n<p>first</p>\n</blockquote>\n<blockquote>\n<p>second</p>\n</blockquote>\n",
             $html,
         );
     }
@@ -426,13 +426,13 @@ final class MarkdownParserTest extends TestCase
     public function testCheckedTaskItemRendersCheckbox(): void
     {
         $html = $this->parser->parse('- [x] Done');
-        $this->assertSame('<ul><li><input type="checkbox" disabled checked> Done</li></ul>', $html);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> Done</li>\n</ul>\n", $html);
     }
 
     public function testUncheckedTaskItemRendersCheckbox(): void
     {
         $html = $this->parser->parse('- [ ] Todo');
-        $this->assertSame('<ul><li><input type="checkbox" disabled> Todo</li></ul>', $html);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled> Todo</li>\n</ul>\n", $html);
     }
 
     public function testMixedTaskList(): void
@@ -481,49 +481,49 @@ final class MarkdownParserTest extends TestCase
     {
         // Two trailing spaces before \n must become <br> not a space.
         $html = $this->parser->parse("foo  \nbar");
-        $this->assertSame('<p>foo<br>bar</p>', $html);
+        $this->assertSame("<p>foo<br />\nbar</p>\n", $html);
     }
 
     public function testBackslashLineBreakProducesBr(): void
     {
         // Trailing backslash before \n must become <br>.
         $html = $this->parser->parse("foo\\\nbar");
-        $this->assertSame('<p>foo<br>bar</p>', $html);
+        $this->assertSame("<p>foo<br />\nbar</p>\n", $html);
     }
 
     public function testNoTrailingSpacesProducesSoftBreak(): void
     {
         // Without trailing spaces the lines are soft-joined with a space.
         $html = $this->parser->parse("foo\nbar");
-        $this->assertSame('<p>foo bar</p>', $html);
+        $this->assertSame("<p>foo bar</p>\n", $html);
     }
 
     public function testHardBreakInsideInlineContent(): void
     {
         // Hard break after inline strong element.
         $html = $this->parser->parse("**bold**  \ntext");
-        $this->assertSame('<p><strong>bold</strong><br>text</p>', $html);
+        $this->assertSame("<p><strong>bold</strong><br />\ntext</p>\n", $html);
     }
 
     public function testMultipleHardBreaksInOneParagraph(): void
     {
         // Multiple hard breaks in sequence.
         $html = $this->parser->parse("a  \nb  \nc");
-        $this->assertSame('<p>a<br>b<br>c</p>', $html);
+        $this->assertSame("<p>a<br />\nb<br />\nc</p>\n", $html);
     }
 
     public function testThreeTrailingSpacesStillOneBr(): void
     {
         // Three or more trailing spaces → still one <br>.
         $html = $this->parser->parse("foo   \nbar");
-        $this->assertSame('<p>foo<br>bar</p>', $html);
+        $this->assertSame("<p>foo<br />\nbar</p>\n", $html);
     }
 
     public function testHardBreakOnLastLineOfParagraphStripped(): void
     {
         // Hard break on last line of a paragraph → no trailing <br> (CommonMark §6.7).
         $html = $this->parser->parse("foo  ");
-        $this->assertSame('<p>foo</p>', $html);
+        $this->assertSame("<p>foo</p>\n", $html);
     }
 
     public function testDoubleBackslashIsNotHardBreak(): void
@@ -538,7 +538,7 @@ final class MarkdownParserTest extends TestCase
         // isSafeUrl() must still fire on content that carries hard_break=true.
         $html = $this->parser->parse("[click](javascript:alert(1))  \nafter");
         $this->assertStringNotContainsString('href="javascript:', $html);
-        $this->assertStringContainsString('<br>', $html);
+        $this->assertStringContainsString('<br />', $html);
     }
 
     public function testFencedCodeInnerLineWithTrailingSpacesIsNotHardBreak(): void
@@ -562,14 +562,14 @@ final class MarkdownParserTest extends TestCase
     {
         // Pre-existing soft-break behavior must not regress.
         $html = $this->parser->parse("line one\nline two\nline three");
-        $this->assertSame('<p>line one line two line three</p>', $html);
+        $this->assertSame("<p>line one line two line three</p>\n", $html);
     }
 
     public function testBlankLineSeparatesParagraphs(): void
     {
         // Blank line separation of paragraphs must not regress.
         $html = $this->parser->parse("para one\n\npara two");
-        $this->assertSame('<p>para one</p><p>para two</p>', $html);
+        $this->assertSame("<p>para one</p>\n<p>para two</p>\n", $html);
     }
 
     // ── Inline HTML in headings — full pipeline (story 29) ───────────────────
@@ -620,7 +620,7 @@ final class MarkdownParserTest extends TestCase
 
         // HTML output must be the canonical hard-break form.
         $html = $this->parser->parse("foo  \nbar");
-        $this->assertSame('<p>foo<br>bar</p>', $html);
+        $this->assertSame("<p>foo<br />\nbar</p>\n", $html);
 
         // AST: single ParagraphNode child.
         $this->assertCount(1, $doc->children);
@@ -655,7 +655,7 @@ final class MarkdownParserTest extends TestCase
         // Output is bare escaped text with no <p> wrapper.
         $html = $this->parser->parse('<div>raw</div>');
 
-        $this->assertSame('&lt;div&gt;raw&lt;/div&gt;', $html);
+        $this->assertSame("&lt;div&gt;raw&lt;/div&gt;\n", $html);
     }
 
     public function testParseWithAllowRawHtmlPassesThroughBlock(): void
@@ -690,6 +690,6 @@ final class MarkdownParserTest extends TestCase
         // Existing callers of parse($md) still work — no exception, returns string.
         $html = $this->parser->parse('hello');
 
-        $this->assertSame('<p>hello</p>', $html);
+        $this->assertSame("<p>hello</p>\n", $html);
     }
 }
