@@ -204,7 +204,9 @@ final class InlineParser
 
                 $raw = $m[0];
 
-                // Determine whether this is a numeric or named entity.
+                // Determine whether this is a numeric or named entity and compute $decodedSafe:
+                // the Unicode character(s) that the entity represents, HTML-escaped as needed
+                // so the renderer can output the value verbatim in an HTML text node.
                 if ($raw[1] === '#') {
                     // Numeric entity — extract the codepoint.
                     $inner = substr($raw, 2, -1); // strip leading '&#' and trailing ';'
@@ -214,25 +216,34 @@ final class InlineParser
                         $codepoint = (int) $inner;
                     }
 
-                    // Reject invalid / dangerous codepoints (CommonMark §2.5 & HTML5 §8.1.4).
-                    $valid = !(
-                        $codepoint === 0                             // NUL
+                    // CommonMark §2.5 / HTML5 §8.1.4 — three buckets:
+                    if ($codepoint === 0
+                        || ($codepoint >= 0xD800 && $codepoint <= 0xDFFF)
+                    ) {
+                        // NUL and surrogates → replacement character U+FFFD.
+                        $decodedSafe = "\u{FFFD}";
+                    } elseif (
+                        $codepoint > 0x10FFFF                       // beyond Unicode range
                         || ($codepoint >= 0x0001 && $codepoint <= 0x001F
                             && $codepoint !== 0x0009                // TAB
                             && $codepoint !== 0x000A                // LF
                             && $codepoint !== 0x000D)               // CR
                         || $codepoint === 0x007F                    // DEL
-                        || ($codepoint >= 0xD800 && $codepoint <= 0xDFFF) // surrogates
                         || ($codepoint >= 0xFDD0 && $codepoint <= 0xFDEF) // non-characters
                         || $codepoint === 0xFFFE
                         || $codepoint === 0xFFFF
-                        || $codepoint > 0x10FFFF                    // beyond Unicode range
-                    );
-
-                    if (!$valid) {
+                    ) {
+                        // Invalid / non-character codepoint → pass raw entity through as text.
                         $buffer .= $raw;
                         $pos    += strlen($raw);
                         continue;
+                    } else {
+                        // Valid codepoint → decode to UTF-8 char, then HTML-escape if needed.
+                        $decodedSafe = htmlspecialchars(
+                            mb_chr($codepoint, 'UTF-8'),
+                            ENT_HTML5,
+                            'UTF-8',
+                        );
                     }
                 } else {
                     // Named entity — PHP recognises it if html_entity_decode changes it.
@@ -243,12 +254,14 @@ final class InlineParser
                         $pos    += strlen($raw);
                         continue;
                     }
+                    // Decode succeeded: HTML-escape the resulting character(s) for safe output.
+                    $decodedSafe = htmlspecialchars($decoded, ENT_HTML5, 'UTF-8');
                 }
 
-                // Valid entity: flush pending buffer, emit node, advance.
+                // Valid entity: flush pending buffer, emit decoded node, advance.
                 $tokens  = $this->flushBuffer($buffer, $tokens);
                 $buffer  = '';
-                $tokens[] = new HtmlEntityNode($raw);
+                $tokens[] = new HtmlEntityNode($decodedSafe);
                 $pos    += strlen($raw);
                 continue;
             }
