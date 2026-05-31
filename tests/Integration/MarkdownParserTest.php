@@ -493,9 +493,9 @@ final class MarkdownParserTest extends TestCase
 
     public function testNoTrailingSpacesProducesSoftBreak(): void
     {
-        // Without trailing spaces the lines are soft-joined with a space.
+        // Without trailing spaces the lines are soft-joined with a newline (CommonMark §6.7).
         $html = $this->parser->parse("foo\nbar");
-        $this->assertSame("<p>foo bar</p>\n", $html);
+        $this->assertSame("<p>foo\nbar</p>\n", $html);
     }
 
     public function testHardBreakInsideInlineContent(): void
@@ -560,9 +560,9 @@ final class MarkdownParserTest extends TestCase
 
     public function testSoftBreakBetweenParagraphLinesUnchanged(): void
     {
-        // Pre-existing soft-break behavior must not regress.
+        // Soft-break renders as newline per CommonMark §6.7.
         $html = $this->parser->parse("line one\nline two\nline three");
-        $this->assertSame("<p>line one line two line three</p>\n", $html);
+        $this->assertSame("<p>line one\nline two\nline three</p>\n", $html);
     }
 
     public function testBlankLineSeparatesParagraphs(): void
