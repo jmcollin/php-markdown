@@ -17,7 +17,7 @@ final class Lexer
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
-    private const PATTERN_HORIZONTAL_RULE  = '/^(-{3,}|\*{3,}|_{3,})\s*$/';
+    private const PATTERN_HORIZONTAL_RULE  = '/^[ \t]{0,3}([-*_])([ \t]*\1){2,}[ \t]*$/';
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
     private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';
@@ -28,7 +28,6 @@ final class Lexer
     private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
     private const PATTERN_COLUMNS_CLOSE    = '/^:::$/';
     private const PATTERN_COLUMNS_SEP      = '/^\|\|\|$/';
-    private const PATTERN_INDENTED_CODE    = '/^(    |\t)(.*)/s';
     private const PATTERN_FOOTNOTE_DEF    = '/^\[\^([A-Za-z0-9_-]{1,50})\]:\s+(.+)$/';
 
     /**
@@ -105,7 +104,8 @@ final class Lexer
         $footnoteBodyLines  = [];
 
         foreach ($lines as $raw) {
-            $line = rtrim($raw, "\r");
+            $line     = rtrim($raw, "\r");
+            $expanded = $this->expandTabs($line);
 
             // Collect lines for an in-progress HTML block.
             // The block ends on the first blank line (CommonMark §4.6 type 6/7).
@@ -316,11 +316,11 @@ final class Lexer
 
             // Indented code block drain (continuation).
             if ($inIndentedBlock) {
-                if (preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                if (preg_match('/^    (.*)$/s', $expanded, $m)
                     && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
                     && !preg_match(self::PATTERN_ORDERED_LIST, $line)
                 ) {
-                    $indentedLines = [...$indentedLines, ...$pendingBlanks, $m[2]];
+                    $indentedLines = [...$indentedLines, ...$pendingBlanks, $this->stripLeadingColumns($line, 4)];
                     $pendingBlanks = [];
                     continue;
                 }
@@ -343,12 +343,12 @@ final class Lexer
             // and only when the line is not a list item — list items with leading spaces
             // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
             if (!$hadPendingLines
-                && preg_match(self::PATTERN_INDENTED_CODE, $line, $m)
+                && preg_match('/^    (.*)$/s', $expanded, $m)
                 && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
                 && !preg_match(self::PATTERN_ORDERED_LIST, $line)
             ) {
                 $inIndentedBlock = true;
-                $indentedLines   = [$m[2]];
+                $indentedLines   = [$this->stripLeadingColumns($line, 4)];
                 $pendingBlanks   = [];
                 continue;
             }
@@ -457,6 +457,80 @@ final class Lexer
         return [$content, null];
     }
 
+    /**
+     * Expand tab characters to spaces using 4-column tab stops (CommonMark §2.1).
+     *
+     * @param int $startCol Column position of the first character of $line (default 0).
+     */
+    private function expandTabs(string $line, int $startCol = 0): string
+    {
+        $out = '';
+        $col = $startCol;
+        $len = strlen($line);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $line[$i];
+            if ($ch === "\t") {
+                $spaces = 4 - ($col % 4);
+                $out .= str_repeat(' ', $spaces);
+                $col += $spaces;
+            } else {
+                $out .= $ch;
+                $col++;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Return the suffix of $line after consuming exactly $cols columns,
+     * prepending any overshoot spaces when a tab spans the boundary.
+     */
+    private function stripLeadingColumns(string $line, int $cols): string
+    {
+        $col = 0;
+        $len = strlen($line);
+        for ($i = 0; $i < $len; $i++) {
+            if ($col >= $cols) {
+                return substr($line, $i);
+            }
+            $ch = $line[$i];
+            if ($ch === "\t") {
+                $tabStop = 4 - ($col % 4);
+                $newCol  = $col + $tabStop;
+                if ($newCol > $cols) {
+                    $surplus = $newCol - $cols;
+                    return str_repeat(' ', $surplus) . substr($line, $i + 1);
+                }
+                $col = $newCol;
+            } else {
+                $col++;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Strip blockquote markers from an already-expanded line.
+     *
+     * Implements CommonMark §5.1: each `>` consumes one mandatory character plus one
+     * optional space. Operates on the expanded form so tab overshoot is already resolved.
+     */
+    private function stripBlockquoteMarkers(string $expandedLine, int $level): string
+    {
+        $pos = 0;
+        $len = strlen($expandedLine);
+        for ($l = 0; $l < $level; $l++) {
+            if ($pos < $len && $expandedLine[$pos] === '>') {
+                $pos++;
+            }
+            // Consume at most one optional space following the marker.
+            if ($pos < $len && $expandedLine[$pos] === ' ') {
+                $pos++;
+            }
+        }
+        return substr($expandedLine, $pos);
+    }
+
     private function matchLine(string $line): Token
     {
         if ($line === '' || ctype_space($line)) {
@@ -477,10 +551,16 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_BLOCKQUOTE, $line, $m)) {
+            // Compute inner content from the expanded line using the CommonMark §5.1 rule:
+            // each '>' marker consumes the '>' character and optionally one space.
+            // Operating on the expanded form ensures tabs in the prefix are correctly handled.
+            $level = substr_count($m[1], '>');
+            $expandedLine = $this->expandTabs($line);
+            $innerContent = $this->stripBlockquoteMarkers($expandedLine, $level);
             return new Token(
                 TokenType::BLOCKQUOTE,
-                trim($m[2]),
-                ['level' => substr_count($m[1], '>')],
+                $innerContent,
+                ['level' => $level],
             );
         }
 

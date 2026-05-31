@@ -492,17 +492,14 @@ final class Parser
             if ($level < $minLevel) {
                 // Level decrease: flush buffer and yield cursor to caller.
                 if ($buffer !== []) {
-                    $children[] = new ParagraphNode(
-                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
-                    );
+                    array_push($children, ...$this->parseBlockquoteBuffer($buffer));
+                    $buffer = [];
                 }
                 return new BlockquoteNode(children: $children);
             }
 
             if ($level === $minLevel) {
-                if ($tokens[$i]->content !== '') {
-                    $buffer[] = $tokens[$i]->content;
-                }
+                $buffer[] = $tokens[$i]->content;
                 $i++;
 
                 // Flush buffer when the next token changes level or ends the blockquote run.
@@ -511,9 +508,7 @@ final class Parser
                     && $tokens[$i]->meta['level'] === $minLevel;
 
                 if (!$nextIsCurrentLevel && $buffer !== []) {
-                    $children[] = new ParagraphNode(
-                        children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
-                    );
+                    array_push($children, ...$this->parseBlockquoteBuffer($buffer));
                     $buffer = [];
                 }
                 continue;
@@ -521,9 +516,7 @@ final class Parser
 
             // $level > $minLevel: flush buffer then recurse.
             if ($buffer !== []) {
-                $children[] = new ParagraphNode(
-                    children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
-                );
+                array_push($children, ...$this->parseBlockquoteBuffer($buffer));
                 $buffer = [];
             }
 
@@ -534,20 +527,35 @@ final class Parser
                 // are intentionally rendered as content inside the level-32 blockquote rather
                 // than triggering unbounded recursion. The extra ">" markers are consumed and
                 // discarded; only the text content is preserved.
-                if ($tokens[$i]->content !== '') {
-                    $buffer[] = $tokens[$i]->content;
-                }
+                $buffer[] = $tokens[$i]->content;
                 $i++;
             }
         }
 
         // Flush any remaining buffer at end of token stream.
         if ($buffer !== []) {
-            $children[] = new ParagraphNode(
-                children: $this->inlineParser->parse(implode(' ', $buffer), $this->linkRefs, $this->footnoteDefs),
-            );
+            array_push($children, ...$this->parseBlockquoteBuffer($buffer));
         }
 
         return new BlockquoteNode(children: $children);
+    }
+
+    /**
+     * Re-tokenize a collected blockquote content buffer and parse it into block nodes.
+     *
+     * Each entry in $buffer is the raw content string of one BLOCKQUOTE token (one line).
+     * Empty strings (blank lines) become blank-line separators between blocks.
+     * The content is joined with newlines and passed through the Lexer so that
+     * indented code blocks, headings, etc. within a blockquote are correctly detected.
+     *
+     * @param  string[] $buffer
+     * @return array<int, \PhpMarkdown\Node\BlockNodeInterface>
+     */
+    private function parseBlockquoteBuffer(array $buffer): array
+    {
+        $lexer   = new Lexer();
+        $raw     = implode("\n", $buffer);
+        $innerTokens = $lexer->tokenize($raw);
+        return $this->parseBlocks($innerTokens);
     }
 }
