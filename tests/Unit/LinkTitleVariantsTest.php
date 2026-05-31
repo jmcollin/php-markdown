@@ -33,49 +33,49 @@ final class LinkTitleVariantsTest extends TestCase
     public function test_link_with_double_quote_title(): void
     {
         $html = $this->renderInline('[foo](url "title")');
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /** AC-2: single-quote title on a plain link. */
     public function test_link_with_single_quote_title(): void
     {
         $html = $this->renderInline("[foo](url 'title')");
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /** AC-3: parenthesised title on a plain link. */
     public function test_link_with_parenthesised_title(): void
     {
         $html = $this->renderInline('[foo](url (title))');
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /** AC-4: single-quote title on an image. */
     public function test_image_with_single_quote_title(): void
     {
         $html = $this->renderInline("![alt](img.png 'title')");
-        $this->assertSame('<p><img src="img.png" alt="alt" title="title"></p>', $html);
+        $this->assertSame("<p><img src=\"img.png\" alt=\"alt\" title=\"title\" /></p>\n", $html);
     }
 
     /** AC-5: parenthesised title on an image. */
     public function test_image_with_parenthesised_title(): void
     {
         $html = $this->renderInline('![alt](img.png (title))');
-        $this->assertSame('<p><img src="img.png" alt="alt" title="title"></p>', $html);
+        $this->assertSame("<p><img src=\"img.png\" alt=\"alt\" title=\"title\" /></p>\n", $html);
     }
 
     /** AC-6: single-quote title with angle-bracket URL. */
     public function test_angle_bracket_url_link_with_single_quote_title(): void
     {
         $html = $this->renderInline("[foo](<url> 'title')");
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /** AC-7: parenthesised title with angle-bracket URL. */
     public function test_angle_bracket_url_link_with_parenthesised_title(): void
     {
         $html = $this->renderInline('[foo](<url> (title))');
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /**
@@ -93,7 +93,7 @@ final class LinkTitleVariantsTest extends TestCase
     {
         // The renderer applies htmlspecialchars(ENT_QUOTES), so ' is encoded as &#039; in attributes.
         $html = $this->renderInline("[foo](url 'it\\'s')");
-        $this->assertSame('<p><a href="url" title="it&#039;s">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"it&#039;s\">foo</a></p>\n", $html);
     }
 
     /**
@@ -121,7 +121,7 @@ final class LinkTitleVariantsTest extends TestCase
     public function test_trailing_whitespace_before_close_paren_is_tolerated(): void
     {
         $html = $this->renderInline("[foo](url 'title'   )");
-        $this->assertSame('<p><a href="url" title="title">foo</a></p>', $html);
+        $this->assertSame("<p><a href=\"url\" title=\"title\">foo</a></p>\n", $html);
     }
 
     /**
@@ -139,6 +139,6 @@ final class LinkTitleVariantsTest extends TestCase
     public function test_image_angle_bracket_url_with_double_quote_title_regression(): void
     {
         $html = $this->renderInline('![alt](<img.png> "title")');
-        $this->assertSame('<p><img src="img.png" alt="alt" title="title"></p>', $html);
+        $this->assertSame("<p><img src=\"img.png\" alt=\"alt\" title=\"title\" /></p>\n", $html);
     }
 }

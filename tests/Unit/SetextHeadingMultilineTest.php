@@ -147,7 +147,7 @@ final class SetextHeadingMultilineTest extends TestCase
 
     public function testBlankBreaksAccumulationRenders(): void
     {
-        self::assertSame('<p>foo</p><h1>bar</h1>', $this->render("foo\n\nbar\n==="));
+        self::assertSame("<p>foo</p>\n<h1>bar</h1>", $this->render("foo\n\nbar\n==="));
     }
 
     public function testInlineMarkupSpansLinesRenders(): void

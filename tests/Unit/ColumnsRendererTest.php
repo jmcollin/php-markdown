@@ -48,7 +48,7 @@ final class ColumnsRendererTest extends TestCase
         $out = $this->renderMarkdown(":::columns\nGauche\n|||\nDroite\n:::");
 
         $this->assertSame(
-            '<div class="grid grid-cols-2 gap-4"><div class="min-w-0"><p>Gauche</p></div><div class="min-w-0"><p>Droite</p></div></div>',
+            '<div class="grid grid-cols-2 gap-4"><div class="min-w-0"><p>Gauche</p>' . "\n" . '</div><div class="min-w-0"><p>Droite</p>' . "\n" . '</div></div>',
             $out,
         );
     }

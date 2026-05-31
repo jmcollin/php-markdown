@@ -62,7 +62,7 @@ final class RendererTest extends TestCase
     {
         return array_combine(
             array_map(fn($l) => "h{$l}", range(1, 6)),
-            array_map(fn($l) => [$l, "<h{$l}>T</h{$l}>"], range(1, 6)),
+            array_map(fn($l) => [$l, "<h{$l}>T</h{$l}>\n"], range(1, 6)),
         );
     }
 
@@ -77,7 +77,7 @@ final class RendererTest extends TestCase
     public function testAmpersandEscaped(): void
     {
         $out = $this->render([new ParagraphNode([new TextNode('a & b')])]);
-        $this->assertSame('<p>a &amp; b</p>', $out);
+        $this->assertSame("<p>a &amp; b</p>\n", $out);
     }
 
     public function testQuoteEscapedInAttribute(): void
@@ -91,7 +91,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ParagraphNode([
             new LinkNode('https://example.com', [new TextNode('click')]),
         ])]);
-        $this->assertSame('<p><a href="https://example.com">click</a></p>', $out);
+        $this->assertSame("<p><a href=\"https://example.com\">click</a></p>\n", $out);
     }
 
     public function testLinkHrefEscaped(): void
@@ -106,13 +106,13 @@ final class RendererTest extends TestCase
     public function testImageRendered(): void
     {
         $out = $this->render([new ParagraphNode([new ImageNode('img.png', 'desc')])]);
-        $this->assertSame('<p><img src="img.png" alt="desc"></p>', $out);
+        $this->assertSame("<p><img src=\"img.png\" alt=\"desc\" /></p>\n", $out);
     }
 
     public function testImageWithTitleRendered(): void
     {
         $out = $this->render([new ParagraphNode([new ImageNode('img.png', 'alt text', 'My tooltip')])]);
-        $this->assertSame('<p><img src="img.png" alt="alt text" title="My tooltip"></p>', $out);
+        $this->assertSame("<p><img src=\"img.png\" alt=\"alt text\" title=\"My tooltip\" /></p>\n", $out);
     }
 
     public function testImageTitleEscaped(): void
@@ -124,7 +124,7 @@ final class RendererTest extends TestCase
     public function testFencedCodeWithLanguage(): void
     {
         $out = $this->render([new FencedCodeNode("echo 'x';", 'php')]);
-        $this->assertSame('<pre><code class="language-php">echo &#039;x&#039;;</code></pre>', $out);
+        $this->assertSame("<pre><code class=\"language-php\">echo &#039;x&#039;;</code></pre>\n", $out);
     }
 
     public function testFencedCodeContentEscaped(): void
@@ -139,7 +139,7 @@ final class RendererTest extends TestCase
             new ListItemNode([new TextNode('a')]),
             new ListItemNode([new TextNode('b')]),
         ])]);
-        $this->assertSame('<ul><li>a</li><li>b</li></ul>', $out);
+        $this->assertSame("<ul>\n<li>a</li>\n<li>b</li>\n</ul>\n", $out);
     }
 
     public function testOrderedList(): void
@@ -147,7 +147,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: true, children: [
             new ListItemNode([new TextNode('a')]),
         ])]);
-        $this->assertSame('<ol><li>a</li></ol>', $out);
+        $this->assertSame("<ol>\n<li>a</li>\n</ol>\n", $out);
     }
 
     public function testBlockquoteRendered(): void
@@ -155,7 +155,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new BlockquoteNode([
             new ParagraphNode([new TextNode('quote')]),
         ])]);
-        $this->assertSame('<blockquote><p>quote</p></blockquote>', $out);
+        $this->assertSame("<blockquote>\n<p>quote</p>\n</blockquote>\n", $out);
     }
 
     public function testNestedBlockquoteRendered(): void
@@ -167,7 +167,7 @@ final class RendererTest extends TestCase
                 ]),
             ]),
         ]);
-        $this->assertSame('<blockquote><blockquote><p>deep</p></blockquote></blockquote>', $out);
+        $this->assertSame("<blockquote>\n<blockquote>\n<p>deep</p>\n</blockquote>\n</blockquote>\n", $out);
     }
 
     public function testBlockquoteMixedChildrenRendered(): void
@@ -182,7 +182,7 @@ final class RendererTest extends TestCase
             ]),
         ]);
         $this->assertSame(
-            '<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>outer again</p></blockquote>',
+            "<blockquote>\n<p>outer</p>\n<blockquote>\n<p>inner</p>\n</blockquote>\n<p>outer again</p>\n</blockquote>\n",
             $out,
         );
     }
@@ -194,19 +194,19 @@ final class RendererTest extends TestCase
                 new ParagraphNode([new StrongNode([new TextNode('bold')])]),
             ]),
         ]);
-        $this->assertSame('<blockquote><p><strong>bold</strong></p></blockquote>', $out);
+        $this->assertSame("<blockquote>\n<p><strong>bold</strong></p>\n</blockquote>\n", $out);
     }
 
     public function testHorizontalRuleRendered(): void
     {
         $out = $this->render([new HorizontalRuleNode()]);
-        $this->assertSame('<hr>', $out);
+        $this->assertSame("<hr />\n", $out);
     }
 
     public function testInlineCodeEscaped(): void
     {
         $out = $this->render([new ParagraphNode([new CodeNode('<b>')])]);
-        $this->assertSame('<p><code>&lt;b&gt;</code></p>', $out);
+        $this->assertSame("<p><code>&lt;b&gt;</code></p>\n", $out);
     }
 
     public function testStrongAndEmRendered(): void
@@ -215,7 +215,7 @@ final class RendererTest extends TestCase
             new StrongNode([new TextNode('b')]),
             new EmphasisNode([new TextNode('i')]),
         ])]);
-        $this->assertSame('<p><strong>b</strong><em>i</em></p>', $out);
+        $this->assertSame("<p><strong>b</strong><em>i</em></p>\n", $out);
     }
 
     public function testTableRendered(): void
@@ -335,13 +335,13 @@ final class RendererTest extends TestCase
     public function testStrikethroughRendered(): void
     {
         $out = $this->render([new ParagraphNode([new StrikethroughNode([new TextNode('foo')])])]);
-        $this->assertSame('<p><del>foo</del></p>', $out);
+        $this->assertSame("<p><del>foo</del></p>\n", $out);
     }
 
     public function testStrikethroughXssEscaped(): void
     {
         $out = $this->render([new ParagraphNode([new StrikethroughNode([new TextNode('<b>')])])]);
-        $this->assertSame('<p><del>&lt;b&gt;</del></p>', $out);
+        $this->assertSame("<p><del>&lt;b&gt;</del></p>\n", $out);
     }
 
     // ── Nested list rendering ────────────────────────────────────────────────
@@ -358,7 +358,7 @@ final class RendererTest extends TestCase
                 ]),
             ]),
         ]);
-        $this->assertSame('<ul><li>a<ul><li>b</li></ul></li></ul>', $out);
+        $this->assertSame("<ul>\n<li>a<ul>\n<li>b</li>\n</ul>\n</li>\n</ul>\n", $out);
     }
 
     public function testMixedOrderedUnorderedNesting(): void
@@ -373,7 +373,7 @@ final class RendererTest extends TestCase
                 ]),
             ]),
         ]);
-        $this->assertSame('<ol><li>first<ul><li>nested</li></ul></li></ol>', $out);
+        $this->assertSame("<ol>\n<li>first<ul>\n<li>nested</li>\n</ul>\n</li>\n</ol>\n", $out);
     }
 
     // ── Task list (checkbox) rendering ───────────────────────────────────────
@@ -383,7 +383,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Done')], checked: true),
         ])]);
-        $this->assertSame('<ul><li><input type="checkbox" disabled checked> Done</li></ul>', $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> Done</li>\n</ul>\n", $out);
     }
 
     public function testUncheckedListItemRendersCheckbox(): void
@@ -391,7 +391,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Todo')], checked: false),
         ])]);
-        $this->assertSame('<ul><li><input type="checkbox" disabled> Todo</li></ul>', $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled> Todo</li>\n</ul>\n", $out);
     }
 
     public function testPlainListItemNoCheckbox(): void
@@ -399,7 +399,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('plain')], checked: null),
         ])]);
-        $this->assertSame('<ul><li>plain</li></ul>', $out);
+        $this->assertSame("<ul>\n<li>plain</li>\n</ul>\n", $out);
     }
 
     public function testCheckedListItemWithNoChildrenHasTrailingSpace(): void
@@ -409,7 +409,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([], checked: true),
         ])]);
-        $this->assertSame('<ul><li><input type="checkbox" disabled checked> </li></ul>', $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> </li>\n</ul>\n", $out);
     }
 
     // ── HardBreakNode rendering ──────────────────────────────────────────────
@@ -422,7 +422,7 @@ final class RendererTest extends TestCase
             new HardBreakNode(),
             new TextNode('bar'),
         ])]);
-        $this->assertSame('<p>foo<br>bar</p>', $out);
+        $this->assertSame("<p>foo<br />\nbar</p>\n", $out);
     }
 
     public function testHardBreakNodeAloneRendersAsBr(): void
@@ -431,7 +431,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ParagraphNode([
             new HardBreakNode(),
         ])]);
-        $this->assertSame('<p><br></p>', $out);
+        $this->assertSame("<p><br />\n</p>\n", $out);
     }
 
     // ── RawHtmlInlineNode rendering ────────────────────────────────────────────
@@ -440,7 +440,7 @@ final class RendererTest extends TestCase
     {
         // S29 escaped-fallback contract: tag chars become HTML entities.
         $out = $this->render([new ParagraphNode([new RawHtmlInlineNode('<span class="hi">')])]);
-        $this->assertSame('<p>&lt;span class=&quot;hi&quot;&gt;</p>', $out);
+        $this->assertSame("<p>&lt;span class=&quot;hi&quot;&gt;</p>\n", $out);
     }
 
     public function testRawHtmlInlineScriptNodeIsEscaped(): void
@@ -457,7 +457,7 @@ final class RendererTest extends TestCase
             new TextNode('1'),
             new RawHtmlInlineNode('</sup>'),
         ])]);
-        $this->assertSame('<h1>&lt;sup&gt;1&lt;/sup&gt;</h1>', $out);
+        $this->assertSame("<h1>&lt;sup&gt;1&lt;/sup&gt;</h1>\n", $out);
     }
 
     public function testRawHtmlInlineNodeMixedWithText(): void
@@ -469,7 +469,7 @@ final class RendererTest extends TestCase
             new RawHtmlInlineNode('</span>'),
             new TextNode(' more'),
         ])]);
-        $this->assertSame('<p>text &lt;span&gt;word&lt;/span&gt; more</p>', $out);
+        $this->assertSame("<p>text &lt;span&gt;word&lt;/span&gt; more</p>\n", $out);
     }
 
     // ── RawHtmlBlockNode rendering ─────────────────────────────────────────────
@@ -480,7 +480,7 @@ final class RendererTest extends TestCase
         $out = (new HtmlRenderer())->render(new DocumentNode([
             new RawHtmlBlockNode('<div>x</div>'),
         ]));
-        $this->assertSame('&lt;div&gt;x&lt;/div&gt;', $out);
+        $this->assertSame("&lt;div&gt;x&lt;/div&gt;\n", $out);
     }
 
     public function testRawHtmlBlockNodeSanitizedWhenAllowed(): void
@@ -555,7 +555,7 @@ final class RendererTest extends TestCase
         $out = (new HtmlRenderer())->render(new DocumentNode([
             new ParagraphNode([new HtmlEntityNode('&amp;')]),
         ]));
-        $this->assertSame('<p>&amp;</p>', $out);
+        $this->assertSame("<p>&amp;</p>\n", $out);
     }
 
     public function testHtmlEntityNodeVerbatimWhenAllowRawHtmlEnabled(): void
@@ -564,6 +564,6 @@ final class RendererTest extends TestCase
         $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
             new ParagraphNode([new HtmlEntityNode('&amp;')]),
         ]));
-        $this->assertSame('<p>&amp;</p>', $out);
+        $this->assertSame("<p>&amp;</p>\n", $out);
     }
 }

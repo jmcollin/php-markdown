@@ -44,7 +44,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~\nfoo\n~~~");
 
-        $this->assertSame('<pre><code>foo</code></pre>', $html);
+        $this->assertSame("<pre><code>foo</code></pre>\n", $html);
     }
 
     /**
@@ -54,7 +54,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~php\necho 1;\n~~~");
 
-        $this->assertSame('<pre><code class="language-php">echo 1;</code></pre>', $html);
+        $this->assertSame("<pre><code class=\"language-php\">echo 1;</code></pre>\n", $html);
     }
 
     /**
@@ -64,7 +64,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~\nfoo\n~~~~");
 
-        $this->assertSame('<pre><code>foo</code></pre>', $html);
+        $this->assertSame("<pre><code>foo</code></pre>\n", $html);
     }
 
     /**
@@ -75,7 +75,7 @@ final class FencedCodeTildeTest extends TestCase
         // The ~~~ line inside is treated as content, block is unclosed at EOF.
         $html = $this->render("~~~~\nfoo\n~~~\nbar");
 
-        $this->assertSame("<pre><code>foo\n~~~\nbar</code></pre>", $html);
+        $this->assertSame("<pre><code>foo\n~~~\nbar</code></pre>\n", $html);
     }
 
     /**
@@ -85,7 +85,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~\nfoo\n```\n~~~");
 
-        $this->assertSame("<pre><code>foo\n```</code></pre>", $html);
+        $this->assertSame("<pre><code>foo\n```</code></pre>\n", $html);
     }
 
     /**
@@ -95,7 +95,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("```\nfoo\n~~~\n```");
 
-        $this->assertSame("<pre><code>foo\n~~~</code></pre>", $html);
+        $this->assertSame("<pre><code>foo\n~~~</code></pre>\n", $html);
     }
 
     /**
@@ -105,7 +105,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("   ~~~\nfoo\n   ~~~");
 
-        $this->assertSame('<pre><code>foo</code></pre>', $html);
+        $this->assertSame("<pre><code>foo</code></pre>\n", $html);
     }
 
     /**
@@ -116,7 +116,7 @@ final class FencedCodeTildeTest extends TestCase
         // "    ~~~" is an indented code block containing "~~~" as content.
         $html = $this->render("    ~~~\n");
 
-        $this->assertSame("<pre><code>~~~\n</code></pre>", $html);
+        $this->assertSame("<pre><code>~~~\n</code></pre>\n", $html);
         $this->assertStringNotContainsString('</code></pre><pre><code>', $html);
     }
 
@@ -127,7 +127,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~\nfoo\nbar");
 
-        $this->assertSame("<pre><code>foo\nbar</code></pre>", $html);
+        $this->assertSame("<pre><code>foo\nbar</code></pre>\n", $html);
     }
 
     /**
@@ -137,7 +137,7 @@ final class FencedCodeTildeTest extends TestCase
     {
         $html = $this->render("~~~~\nfoo\n~~~~");
 
-        $this->assertSame('<pre><code>foo</code></pre>', $html);
+        $this->assertSame("<pre><code>foo</code></pre>\n", $html);
     }
 
     /**
@@ -148,7 +148,7 @@ final class FencedCodeTildeTest extends TestCase
         $html = $this->render("~~~\n<b>bold</b> & \"quotes\"\n~~~");
 
         $this->assertSame(
-            '<pre><code>&lt;b&gt;bold&lt;/b&gt; &amp; &quot;quotes&quot;</code></pre>',
+            "<pre><code>&lt;b&gt;bold&lt;/b&gt; &amp; &quot;quotes&quot;</code></pre>\n",
             $html,
         );
     }
@@ -162,7 +162,7 @@ final class FencedCodeTildeTest extends TestCase
         // Info string is a single backtick; after renderer sanitisation it becomes ''.
         $html = $this->render("~~~ `\nconsole.log(1);\n~~~");
 
-        $this->assertSame('<pre><code>console.log(1);</code></pre>', $html);
+        $this->assertSame("<pre><code>console.log(1);</code></pre>\n", $html);
     }
 
     /**
@@ -184,7 +184,7 @@ final class FencedCodeTildeTest extends TestCase
         $html = $this->render("```\nhello\n```\n~~~\nworld\n~~~");
 
         $this->assertSame(
-            '<pre><code>hello</code></pre><pre><code>world</code></pre>',
+            "<pre><code>hello</code></pre>\n<pre><code>world</code></pre>\n",
             $html,
         );
     }
@@ -197,7 +197,7 @@ final class FencedCodeTildeTest extends TestCase
         $html = $this->render("paragraph text\n\n~~~\ncode\n~~~");
 
         $this->assertSame(
-            '<p>paragraph text</p><pre><code>code</code></pre>',
+            "<p>paragraph text</p>\n<pre><code>code</code></pre>\n",
             $html,
         );
     }

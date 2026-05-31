@@ -62,20 +62,20 @@ final class HtmlRenderer
     {
         return match (true) {
             $node instanceof HeadingNode      => $this->renderHeading($node),
-            $node instanceof ParagraphNode    => '<p>' . $this->renderChildren($node->children) . '</p>',
-            $node instanceof BlockquoteNode   => '<blockquote>' . $this->renderChildren($node->children) . '</blockquote>',
+            $node instanceof ParagraphNode    => '<p>' . $this->renderChildren($node->children) . "</p>\n",
+            $node instanceof BlockquoteNode   => "<blockquote>\n" . $this->renderChildren($node->children) . "</blockquote>\n",
             $node instanceof ListNode         => $this->renderList($node),
             $node instanceof ListItemNode     => $this->renderListItem($node),
             $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
-            $node instanceof IndentedCodeNode => '<pre><code>' . $this->esc($node->content) . '</code></pre>',
-            $node instanceof HorizontalRuleNode => '<hr>',
+            $node instanceof IndentedCodeNode => '<pre><code>' . $this->esc($node->content) . "</code></pre>\n",
+            $node instanceof HorizontalRuleNode => "<hr />\n",
             $node instanceof ColumnsNode       => $this->renderColumns($node),
             // Raw HTML blocks: sanitize if allowRawHtml, else escape (XSS-safe default).
             $node instanceof RawHtmlBlockNode =>
                 $this->allowRawHtml
-                    ? $this->sanitizer->sanitize($node->content)
-                    : $this->esc($node->content),
-            $node instanceof HardBreakNode    => '<br>',
+                    ? $this->sanitizer->sanitize($node->content) . "\n"
+                    : $this->esc($node->content) . "\n",
+            $node instanceof HardBreakNode    => "<br />\n",
             // HTML entities pass through verbatim — validated by InlineParser, no esc() needed.
             $node instanceof HtmlEntityNode   => $node->entity,
             $node instanceof TextNode         => $this->esc($node->text),
@@ -112,7 +112,7 @@ final class HtmlRenderer
     private function renderHeading(HeadingNode $node): string
     {
         $tag = 'h' . $node->level;
-        return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+        return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . ">\n";
     }
 
     private function renderList(ListNode $node): string
@@ -122,7 +122,7 @@ final class HtmlRenderer
         foreach ($node->children as $item) {
             $inner .= $this->renderListItem($item, $node->loose);
         }
-        return '<' . $tag . '>' . $inner . '</' . $tag . '>';
+        return '<' . $tag . ">\n" . $inner . '</' . $tag . ">\n";
     }
 
     private function renderListItem(ListItemNode $node, bool $loose = false): string
@@ -130,10 +130,13 @@ final class HtmlRenderer
         $content = $this->renderListItemContent($node->children, $loose);
 
         if ($node->checked === null) {
-            return '<li>' . $content . '</li>';
+            if ($loose) {
+                return "<li>\n" . $content . "</li>\n";
+            }
+            return '<li>' . $content . "</li>\n";
         }
         $checkbox = '<input type="checkbox" disabled' . ($node->checked ? ' checked' : '') . '>';
-        return '<li>' . $checkbox . ' ' . $content . '</li>';
+        return '<li>' . $checkbox . ' ' . $content . "</li>\n";
     }
 
     /**
@@ -161,7 +164,7 @@ final class HtmlRenderer
 
         $html = '';
         if ($inlinePart !== []) {
-            $html .= '<p>' . $this->renderChildren($inlinePart) . '</p>';
+            $html .= '<p>' . $this->renderChildren($inlinePart) . "</p>\n";
         }
         foreach ($blockPart as $block) {
             $html .= $this->renderNode($block);
@@ -187,7 +190,7 @@ final class HtmlRenderer
         $classAttr = ($lang ?? '') !== ''
             ? ' class="' . $this->esc('language-' . (string) $lang) . '"'
             : '';
-        return '<pre><code' . $classAttr . '>' . $this->esc($node->content) . '</code></pre>';
+        return '<pre><code' . $classAttr . '>' . $this->esc($node->content) . "</code></pre>\n";
     }
 
     private function renderLink(LinkNode $node): string
@@ -205,7 +208,7 @@ final class HtmlRenderer
         $titleAttr = $node->title !== null
             ? ' title="' . $this->esc($node->title) . '"'
             : '';
-        return '<img src="' . $this->esc($node->src) . '" alt="' . $this->esc($node->alt) . '"' . $titleAttr . '>';
+        return '<img src="' . $this->esc($node->src) . '" alt="' . $this->esc($node->alt) . '"' . $titleAttr . ' />';
     }
 
     private function renderAutolink(AutolinkNode $node): string

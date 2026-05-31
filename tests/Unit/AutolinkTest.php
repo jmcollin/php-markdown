@@ -33,8 +33,8 @@ final class AutolinkTest extends TestCase
         $para     = new ParagraphNode($nodes);
         $document = new DocumentNode([$para]);
         $html     = $this->renderer->render($document);
-        // Strip outer <p>...</p> to get the inner rendered content.
-        return preg_replace('/^<p>(.*)<\/p>$/s', '$1', $html) ?? $html;
+        // Strip outer <p>...</p> (and optional trailing newline) to get the inner rendered content.
+        return preg_replace('/^<p>(.*)<\/p>\n?$/s', '$1', $html) ?? $html;
     }
 
     // ── URL autolinks ─────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ final class AutolinkTest extends TestCase
         $document = new DocumentNode([$para]);
         $html     = $this->renderer->render($document);
         $this->assertSame(
-            '<p><em><a href="https://example.com">https://example.com</a></em></p>',
+            "<p><em><a href=\"https://example.com\">https://example.com</a></em></p>\n",
             $html,
         );
     }
@@ -314,7 +314,7 @@ final class AutolinkTest extends TestCase
         $para     = new ParagraphNode($nodes);
         $document = new DocumentNode([$para]);
         $html     = $this->renderer->render($document);
-        $this->assertStringEndsWith('</a></p>', $html);
+        $this->assertStringEndsWith("</a></p>\n", $html);
     }
 
     public function test_url_autolink_very_long_url(): void

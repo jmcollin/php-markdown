@@ -52,7 +52,7 @@ final class FootnoteTest extends TestCase
         $md = "Text[^1].\n\n[^1]: First footnote.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Text<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">First footnote. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -68,7 +68,7 @@ final class FootnoteTest extends TestCase
         $md = "Alpha[^b] and Beta[^a].\n\n[^a]: Definition A.\n[^b]: Definition B.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Alpha<sup><a href="#fn-1" id="fnref-1">1</a></sup> and Beta<sup><a href="#fn-2" id="fnref-2">2</a></sup>.</p>'
+            "<p>Alpha<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> and Beta<sup><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Definition B. <a href="#fnref-1">↩</a></li>'
             . '<li id="fn-2">Definition A. <a href="#fnref-2">↩</a></li>'
@@ -83,8 +83,8 @@ final class FootnoteTest extends TestCase
         $md = "First[^a].\n\nSecond[^b] and again[^b].\n\n[^a]: Def A.\n[^b]: Def B.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>First<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
-            . '<p>Second<sup><a href="#fn-2" id="fnref-2">2</a></sup> and again<sup><a href="#fn-2" id="fnref-2-2">2</a></sup>.</p>'
+            "<p>First<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
+            . "<p>Second<sup><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup> and again<sup><a href=\"#fn-2\" id=\"fnref-2-2\">2</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Def A. <a href="#fnref-1">↩</a></li>'
             . '<li id="fn-2">Def B. <a href="#fnref-2">↩</a> <a href="#fnref-2-2">↩</a></li>'
@@ -101,7 +101,7 @@ final class FootnoteTest extends TestCase
         $md = "First[^x] and second[^x].\n\n[^x]: Shared note.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>First<sup><a href="#fn-1" id="fnref-1">1</a></sup> and second<sup><a href="#fn-1" id="fnref-1-2">1</a></sup>.</p>'
+            "<p>First<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> and second<sup><a href=\"#fn-1\" id=\"fnref-1-2\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Shared note. <a href="#fnref-1">↩</a> <a href="#fnref-1-2">↩</a></li>'
             . '</ol></section>',
@@ -124,7 +124,7 @@ final class FootnoteTest extends TestCase
     public function testUndefinedReferenceRendersLiteral(): void
     {
         $html = $this->renderMarkdown("See[^missing] for details.");
-        $this->assertSame('<p>See[^missing] for details.</p>', $html);
+        $this->assertSame("<p>See[^missing] for details.</p>\n", $html);
         $this->assertStringNotContainsString('<section', $html);
     }
 
@@ -134,7 +134,7 @@ final class FootnoteTest extends TestCase
     public function testUnusedDefinitionOmitted(): void
     {
         $html = $this->renderMarkdown("Just a paragraph.\n\n[^unused]: Never referenced.");
-        $this->assertSame('<p>Just a paragraph.</p>', $html);
+        $this->assertSame("<p>Just a paragraph.</p>\n", $html);
         $this->assertStringNotContainsString('section', $html);
         $this->assertStringNotContainsString('unused', $html);
     }
@@ -147,7 +147,7 @@ final class FootnoteTest extends TestCase
         $md = "Text[^ml].\n\n[^ml]: First line.\n    Second line, same footnote.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Text<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">First line. Second line, same footnote. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -163,7 +163,7 @@ final class FootnoteTest extends TestCase
         $md = "Note[^fmt].\n\n[^fmt]: **Bold** and _italic_.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Note<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Note<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1"><strong>Bold</strong> and <em>italic</em>. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -192,8 +192,8 @@ final class FootnoteTest extends TestCase
         $md = "[^early]: Defined first.\n\nParagraph with reference[^early].\n\nAnother paragraph.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Paragraph with reference<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
-            . '<p>Another paragraph.</p>'
+            "<p>Paragraph with reference<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
+            . "<p>Another paragraph.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Defined first. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -207,7 +207,7 @@ final class FootnoteTest extends TestCase
         $md = "[^first]: Defined at top.\n\nParagraph with ref[^first].";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Paragraph with ref<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Paragraph with ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Defined at top. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -255,7 +255,7 @@ final class FootnoteTest extends TestCase
     {
         $md = "Ref[^Bar].\n\n[^bar]: Definition for bar.";
         $html = $this->renderMarkdown($md);
-        $this->assertSame('<p>Ref[^Bar].</p>', $html);
+        $this->assertSame("<p>Ref[^Bar].</p>\n", $html);
         $this->assertStringNotContainsString('section', $html);
     }
 
@@ -276,7 +276,7 @@ final class FootnoteTest extends TestCase
         $md = "Ref[^123].\n\n[^123]: All digits.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Ref<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">All digits. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -290,7 +290,7 @@ final class FootnoteTest extends TestCase
         $md = "Ref[^my-note].\n\n[^my-note]: Hyphenated label.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p>Ref<sup><a href="#fn-1" id="fnref-1">1</a></sup>.</p>'
+            "<p>Ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Hyphenated label. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -302,7 +302,7 @@ final class FootnoteTest extends TestCase
     public function testLabelWithSpace_notMatched(): void
     {
         $html = $this->renderMarkdown("Ref[^bad label].");
-        $this->assertSame('<p>Ref[^bad label].</p>', $html);
+        $this->assertSame("<p>Ref[^bad label].</p>\n", $html);
     }
 
     /** EC-3: Definition with empty body (no text after colon) is rejected; ref renders as literal. */
@@ -323,7 +323,8 @@ final class FootnoteTest extends TestCase
     public function testListItemNotTokenizedAsDefinition(): void
     {
         $html = $this->renderMarkdown("- [^1]: This is a list item, not a footnote definition.");
-        $this->assertStringContainsString('<ul><li>', $html);
+        $this->assertStringContainsString('<ul>', $html);
+        $this->assertStringContainsString('<li>', $html);
         $this->assertStringContainsString('[^1]: This is a list item, not a footnote definition.', $html);
         $this->assertStringNotContainsString('<section', $html);
     }
@@ -334,7 +335,7 @@ final class FootnoteTest extends TestCase
     public function testNoSectionWithZeroResolvedFootnotes(): void
     {
         $html = $this->renderMarkdown("Just text.");
-        $this->assertSame('<p>Just text.</p>', $html);
+        $this->assertSame("<p>Just text.</p>\n", $html);
         $this->assertStringNotContainsString('section', $html);
     }
 
@@ -346,7 +347,7 @@ final class FootnoteTest extends TestCase
         $md = "_text[^1]_\n\n[^1]: Inline note.";
         $html = $this->renderMarkdown($md);
         $this->assertSame(
-            '<p><em>text<sup><a href="#fn-1" id="fnref-1">1</a></sup></em></p>'
+            "<p><em>text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup></em></p>\n"
             . '<section class="footnotes"><ol>'
             . '<li id="fn-1">Inline note. <a href="#fnref-1">↩</a></li>'
             . '</ol></section>',
@@ -393,7 +394,7 @@ final class FootnoteTest extends TestCase
     public function testEscapedBracketDoesNotTriggerFootnote(): void
     {
         $html = $this->renderMarkdown("\\[^1]");
-        $this->assertSame('<p>[^1]</p>', $html);
+        $this->assertSame("<p>[^1]</p>\n", $html);
         $this->assertStringNotContainsString('sup', $html);
     }
 
