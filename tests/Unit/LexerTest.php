@@ -163,12 +163,15 @@ final class LexerTest extends TestCase
         $this->assertSame('text', $tokens[0]->content);
     }
 
-    public function testBlockquoteTrailingSpacesInContentAreTrimmed(): void
+    public function testBlockquoteLeadingSurplusSpacesKeptTrailingSpacesPreserved(): void
     {
+        // CommonMark §5.1: '>' strips one optional space; extra leading spaces are content.
+        // The two extra spaces in '>   ' remain as leading content spaces.
+        // Trailing spaces are preserved — the inner re-tokenisation detects hard line breaks.
         $tokens = $this->lexer->tokenize('>   lots of spaces   ');
 
         $this->assertSame(TokenType::BLOCKQUOTE, $tokens[0]->type);
-        $this->assertSame('lots of spaces', $tokens[0]->content);
+        $this->assertSame('  lots of spaces   ', $tokens[0]->content);
     }
 
     public function testHorizontalRuleVariants(): void

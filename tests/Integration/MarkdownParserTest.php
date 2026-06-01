@@ -373,13 +373,14 @@ final class MarkdownParserTest extends TestCase
         $this->assertStringContainsString('text', $html);
     }
 
-    public function testMultiLineSameLevelJoinedWithSpace(): void
+    public function testMultiLineSameLevelJoinedWithSoftBreak(): void
     {
-        // Two consecutive level-1 tokens accumulate into one ParagraphNode joined by space.
+        // Two consecutive level-1 tokens re-tokenize as a single paragraph with a soft line break.
+        // CommonMark §2.3: a soft line break is a newline that is not a hard line break.
         $md = "> line one\n> line two";
         $html = $this->parser->parse($md);
 
-        $this->assertSame("<blockquote>\n<p>line one line two</p>\n</blockquote>\n", $html);
+        $this->assertSame("<blockquote>\n<p>line one\nline two</p>\n</blockquote>\n", $html);
     }
 
     public function testLevelSkipOneToThree(): void
