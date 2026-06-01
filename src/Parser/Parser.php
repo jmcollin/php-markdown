@@ -493,7 +493,6 @@ final class Parser
                 // Level decrease: flush buffer and yield cursor to caller.
                 if ($buffer !== []) {
                     array_push($children, ...$this->parseBlockquoteBuffer($buffer));
-                    $buffer = [];
                 }
                 return new BlockquoteNode(children: $children);
             }
@@ -507,7 +506,7 @@ final class Parser
                     && $tokens[$i]->type === TokenType::BLOCKQUOTE
                     && $tokens[$i]->meta['level'] === $minLevel;
 
-                if (!$nextIsCurrentLevel && $buffer !== []) {
+                if (!$nextIsCurrentLevel) {
                     array_push($children, ...$this->parseBlockquoteBuffer($buffer));
                     $buffer = [];
                 }
