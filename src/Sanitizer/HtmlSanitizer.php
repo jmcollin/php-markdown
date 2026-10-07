@@ -62,7 +62,9 @@ final class HtmlSanitizer
         libxml_use_internal_errors(true);
 
         $dom = new \DOMDocument();
-        $prefixed = '<meta charset="UTF-8">' . $html;
+        // The explicit <body> stops libxml from wrapping leading text in an implied <p>,
+        // which matters for inline fragments (renderer passes paragraph contents here).
+        $prefixed = '<meta charset="UTF-8"><body>' . $html;
 
         $loaded = $dom->loadHTML(
             $prefixed,
