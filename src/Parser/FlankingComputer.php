@@ -15,22 +15,11 @@ final class FlankingComputer
      */
     public static function compute(string $text, int $pos, int $runLen, string $char): array
     {
-        // Extract the codepoint immediately before the run.
-        if ($pos === 0) {
-            $prev = '';
-        } else {
-            $mbPos = mb_strlen(substr($text, 0, $pos), 'UTF-8');
-            $prev  = $mbPos > 0 ? mb_substr($text, $mbPos - 1, 1, 'UTF-8') : '';
-        }
-
-        // Extract the codepoint immediately after the run.
-        $endPos = $pos + $runLen;
-        if ($endPos >= strlen($text)) {
-            $next = '';
-        } else {
-            $mbEnd = mb_strlen(substr($text, 0, $endPos), 'UTF-8');
-            $next  = mb_substr($text, $mbEnd, 1, 'UTF-8');
-        }
+        // Read the neighbouring UTF-8 characters directly from the byte offsets.
+        // Computing character offsets (mb_strlen of the prefix) here would cost O(n)
+        // per delimiter run and make emphasis parsing quadratic.
+        $prev = self::charBefore($text, $pos);
+        $next = self::charAt($text, $pos + $runLen);
 
         // CommonMark §6.2 left- and right-flanking definitions.
         $leftFlanking  = !self::isUnicodeWhitespace($next)
@@ -49,6 +38,36 @@ final class FlankingComputer
         }
 
         return ['canOpen' => $canOpen, 'canClose' => $canClose];
+    }
+
+    /** The UTF-8 character ending just before byte offset $pos ('' at start of text). */
+    private static function charBefore(string $text, int $pos): string
+    {
+        if ($pos <= 0) {
+            return '';
+        }
+        $start = $pos - 1;
+        // Step back over continuation bytes (10xxxxxx), at most 3 of them.
+        while ($start > 0 && $pos - $start < 4 && (ord($text[$start]) & 0xC0) === 0x80) {
+            $start--;
+        }
+        return substr($text, $start, $pos - $start);
+    }
+
+    /** The UTF-8 character starting at byte offset $pos ('' at end of text). */
+    private static function charAt(string $text, int $pos): string
+    {
+        if ($pos >= strlen($text)) {
+            return '';
+        }
+        $lead = ord($text[$pos]);
+        $len  = match (true) {
+            $lead >= 0xF0 => 4,
+            $lead >= 0xE0 => 3,
+            $lead >= 0xC0 => 2,
+            default       => 1,
+        };
+        return substr($text, $pos, $len);
     }
 
     /**
