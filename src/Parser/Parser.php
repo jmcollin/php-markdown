@@ -251,6 +251,9 @@ final class Parser
     {
         $count   = count($tokens);
         $ordered = $tokens[$i]->meta['ordered'];
+        // Changing the bullet char or the ordered delimiter starts a new list (§5.3).
+        $marker  = $tokens[$i]->meta['marker'] ?? null;
+        $start   = $tokens[$i]->meta['start'] ?? null;
         $items   = [];
         $loose   = false;
 
@@ -258,6 +261,7 @@ final class Parser
             && $tokens[$i]->type === TokenType::LIST_ITEM
             && $tokens[$i]->meta['depth'] === $depth
             && $tokens[$i]->meta['ordered'] === $ordered
+            && ($tokens[$i]->meta['marker'] ?? null) === $marker
         ) {
             $itemToken      = $tokens[$i];
             $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs, $this->footnoteDefs);
@@ -285,6 +289,7 @@ final class Parser
                 && $tokens[$j]->type === TokenType::LIST_ITEM
                 && $tokens[$j]->meta['depth'] === $depth
                 && $tokens[$j]->meta['ordered'] === $ordered
+                && ($tokens[$j]->meta['marker'] ?? null) === $marker
             ) {
                 $i     = $j;
                 $loose = true;
@@ -293,7 +298,7 @@ final class Parser
             $items[] = new ListItemNode(children: $nodeChildren, checked: $itemToken->meta['checked'] ?? null);
         }
 
-        return new ListNode(ordered: $ordered, loose: $loose, children: $items);
+        return new ListNode(ordered: $ordered, loose: $loose, children: $items, start: $ordered ? ($start ?? 1) : null);
     }
 
     /**

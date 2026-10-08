@@ -165,7 +165,10 @@ final class HtmlRenderer
         foreach ($node->children as $item) {
             $inner .= $this->renderListItem($item, $node->loose);
         }
-        return '<' . $tag . ">\n" . $inner . '</' . $tag . ">\n";
+        $startAttr = ($node->ordered && $node->start !== null && $node->start !== 1)
+            ? ' start="' . $node->start . '"'
+            : '';
+        return '<' . $tag . $startAttr . ">\n" . $inner . '</' . $tag . ">\n";
     }
 
     private function renderListItem(ListItemNode $node, bool $loose = false): string
