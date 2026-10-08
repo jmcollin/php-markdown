@@ -14,7 +14,7 @@ final class Lexer
 {
     private const PATTERN_HEADING           = '/^(#{1,6})\s+(.*)$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
-    private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
+    private const PATTERN_BLOCKQUOTE       = '/^ {0,3}((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^[ \t]{0,3}([-*_])([ \t]*\1){2,}[ \t]*$/';
@@ -98,6 +98,11 @@ final class Lexer
         $inIndentedBlock = false;
         $indentedLines   = [];
         $pendingBlanks   = [];
+
+        // Blockquote lazy continuation (CommonMark §5.1): whether the last BLOCKQUOTE
+        // token left a paragraph open, and whether a fence is open inside the quote.
+        $bqParagraphOpen = false;
+        $bqFenceOpen     = false;
 
         $inFootnoteBody     = false;
         $footnoteBodyLabel  = '';
@@ -339,6 +344,19 @@ final class Lexer
                 // Fall through to process current line normally.
             }
 
+            // Lazy continuation line: a non-'>' line that cannot start a block continues
+            // the paragraph open in the immediately preceding blockquote line.
+            $prevToken = end($tokens);
+            if ($bqParagraphOpen
+                && $pendingLines === []
+                && $prevToken instanceof Token
+                && $prevToken->type === TokenType::BLOCKQUOTE
+                && $this->isParagraphContinuation($line)
+            ) {
+                $tokens[] = new Token(TokenType::BLOCKQUOTE, ltrim($line, " \t"), ['level' => $prevToken->meta['level']]);
+                continue;
+            }
+
             // Start new indented code block (only when no paragraph was active,
             // and only when the line is not a list item — list items with leading spaces
             // are handled by matchLine() via PATTERN_UNORDERED_LIST / PATTERN_ORDERED_LIST).
@@ -389,6 +407,26 @@ final class Lexer
                 $tokens[] = $pt;
             }
             $pendingLines = [];
+
+            if ($token->type === TokenType::BLOCKQUOTE) {
+                $prevToken = end($tokens);
+                $continuesQuote = $prevToken instanceof Token && $prevToken->type === TokenType::BLOCKQUOTE;
+                if (!$continuesQuote) {
+                    $bqParagraphOpen = false;
+                    $bqFenceOpen     = false;
+                }
+                // A shallower '>' line whose content is paragraph text is a lazy
+                // continuation of the deeper quote's open paragraph (e.g. ">>> a\n> b").
+                if ($continuesQuote
+                    && $bqParagraphOpen
+                    && $token->meta['level'] < $prevToken->meta['level']
+                    && $this->isParagraphContinuation($token->content)
+                ) {
+                    $token = new Token(TokenType::BLOCKQUOTE, $token->content, ['level' => $prevToken->meta['level']]);
+                }
+                [$bqParagraphOpen, $bqFenceOpen] = $this->quoteLineState($token->content, $bqParagraphOpen, $bqFenceOpen);
+            }
+
             $tokens[] = $token;
         }
 
@@ -520,6 +558,11 @@ final class Lexer
         $pos = 0;
         $len = strlen($expandedLine);
         for ($l = 0; $l < $level; $l++) {
+            // Skip indentation before the marker (0-3 spaces before the first one,
+            // any spacing between nested markers, as PATTERN_BLOCKQUOTE allows).
+            while ($pos < $len && $expandedLine[$pos] === ' ') {
+                $pos++;
+            }
             if ($pos < $len && $expandedLine[$pos] === '>') {
                 $pos++;
             }
@@ -529,6 +572,48 @@ final class Lexer
             }
         }
         return substr($expandedLine, $pos);
+    }
+
+    /**
+     * True when $line is non-blank paragraph text that cannot start a block able to
+     * interrupt a paragraph (CommonMark §5.1 "paragraph continuation text").
+     */
+    private function isParagraphContinuation(string $line): bool
+    {
+        if ($line === '' || ctype_space($line)) {
+            return false;
+        }
+        return !preg_match(self::PATTERN_FENCED_OPEN, $line)
+            && !preg_match($this->patternHtmlBlockStart, $line)
+            && !preg_match(self::PATTERN_HORIZONTAL_RULE, $line)
+            && !preg_match(self::PATTERN_HEADING, $line)
+            && !preg_match(self::PATTERN_BLOCKQUOTE, $line)
+            && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+            && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+            && !preg_match(self::PATTERN_COLUMNS_OPEN, $line);
+    }
+
+    /**
+     * Track, line by line, whether the content of a blockquote leaves a paragraph open
+     * (so the next line may be a lazy continuation) and whether a code fence is open.
+     *
+     * @return array{bool, bool} [paragraphOpen, fenceOpen]
+     */
+    private function quoteLineState(string $content, bool $paragraphOpen, bool $fenceOpen): array
+    {
+        if (preg_match(self::PATTERN_FENCED_OPEN, $content)) {
+            return [false, !$fenceOpen];
+        }
+        if ($fenceOpen) {
+            return [false, true];
+        }
+        // Indented code cannot interrupt a paragraph, but it cannot start one either.
+        if (!$paragraphOpen && str_starts_with($this->expandTabs($content), '    ')) {
+            return [false, false];
+        }
+        $isText = $this->isParagraphContinuation($content)
+            || ($paragraphOpen && $content !== '' && !ctype_space($content) && !preg_match(self::PATTERN_HEADING, $content));
+        return [$isText && !preg_match(self::PATTERN_TABLE_SEPARATOR, $content), false];
     }
 
     private function matchLine(string $line): Token

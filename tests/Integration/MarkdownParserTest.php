@@ -321,7 +321,9 @@ final class MarkdownParserTest extends TestCase
 
     public function testNestedBlockquoteMixedLevels(): void
     {
-        $md = "> outer\n> > inner\n> outer again";
+        // The blank ">" line closes the inner paragraph; without it "> outer again"
+        // would be a lazy continuation of "inner" (CommonMark §5.1).
+        $md = "> outer\n> > inner\n>\n> outer again";
         $html = $this->parser->parse($md);
 
         $this->assertSame(
@@ -343,7 +345,7 @@ final class MarkdownParserTest extends TestCase
 
     public function testLevelDecreaseThenIncrease(): void
     {
-        $md = "> a\n> > b\n> c\n> > d";
+        $md = "> a\n> > b\n>\n> c\n> > d";
         $html = $this->parser->parse($md);
 
         $this->assertSame(
