@@ -18,6 +18,7 @@ use PhpMarkdown\Node\Inline\StrikethroughNode;
 use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\InlineNodeInterface;
+use PhpMarkdown\Sanitizer\UrlValidator;
 
 /**
  * Parses inline Markdown syntax into a sequence of InlineNode objects.
@@ -26,14 +27,6 @@ use PhpMarkdown\Node\InlineNodeInterface;
  */
 final class InlineParser
 {
-    private const SAFE_SCHEMES = ['http', 'https', 'mailto', ''];
-
-    /**
-     * Autolinks keep CommonMark's "any scheme" rule (ftp:, irc:, …) except these,
-     * which execute code or render attacker-controlled documents when followed.
-     */
-    private const SCRIPT_SCHEMES = ['javascript', 'vbscript', 'data'];
-
     /** Maximum nesting depth for recursive inline parsing (prevents stack overflow). */
     private const MAX_DEPTH = 64;
 
@@ -350,8 +343,7 @@ final class InlineParser
             if ($char === '<') {
                 // 1. URL autolink — MUST run before PATTERN_RAW_HTML_INLINE (see constant comment).
                 if (preg_match(self::PATTERN_AUTOLINK_URL, $text, $m, 0, $pos)) {
-                    $scheme = strtolower(substr($m[1], 0, (int) strpos($m[1], ':')));
-                    if (in_array($scheme, self::SCRIPT_SCHEMES, true)) {
+                    if (UrlValidator::hasScriptScheme($m[1])) {
                         // <javascript:…>, <data:…>, <vbscript:…>: literal text (XSS prevention).
                         $buffer .= $m[0];
                         $pos    += strlen($m[0]);
@@ -470,7 +462,7 @@ final class InlineParser
         $match = $active
             ? $this->matchLinkTail($text, $pos + 1, substr($text, $opener['start'], $pos - $opener['start']))
             : null;
-        if ($match === null || !$this->isSafeLinkUrl($match['href'])) {
+        if ($match === null || !UrlValidator::isSafe($match['href'])) {
             // Not a link (or an unsafe URL — XSS prevention): ']' is literal text and the
             // opener placeholder stays as a literal '[' / '!['.
             $buffer .= ']';
@@ -760,31 +752,5 @@ final class InlineParser
             };
         }
         return $out;
-    }
-
-    /**
-     * Safety check for link/image URLs (after escapes and entities are decoded).
-     *
-     * Spaces are allowed (angle-bracket destinations, entities). C0 controls and DEL are
-     * rejected, raw or percent-encoded — browsers strip CR/LF/TAB from URLs, which would
-     * otherwise allow a "java\nscript:" bypass. Leading/trailing spaces are trimmed before
-     * the scheme check, as browsers do.
-     */
-    private function isSafeLinkUrl(string $url): bool
-    {
-        if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
-            return false;
-        }
-        $url = trim($url, ' ');
-        // Reject protocol-relative URLs (//evil.com inherits the host page's scheme).
-        if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
-            return false;
-        }
-        $parts = parse_url(str_replace(' ', '%20', $url));
-        if ($parts === false) {
-            return false;
-        }
-        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
-        return in_array($scheme, self::SAFE_SCHEMES, true);
     }
 }

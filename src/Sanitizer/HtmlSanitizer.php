@@ -50,8 +50,6 @@ final class HtmlSanitizer
     /** @var string[] */
     private const URL_ATTRS = ['href', 'src'];
 
-    /** @var string[] */
-    private const SAFE_URL_SCHEMES = ['http', 'https', 'mailto', ''];
 
     public function sanitize(string $html): string
     {
@@ -210,9 +208,9 @@ final class HtmlSanitizer
                 continue;
             }
 
-            // URL validation for href and src
+            // URL validation for href and src (DOM has already decoded entities).
             if (in_array($lcName, self::URL_ATTRS, true)) {
-                if (!$this->isSafeUrl($attrNode->value)) {
+                if (!UrlValidator::isSafe($attrNode->value)) {
                     $el->removeAttributeNode($attrNode);
                     continue;
                 }
@@ -234,36 +232,5 @@ final class HtmlSanitizer
             }
             $el->setAttribute('rel', implode(' ', $tokens));
         }
-    }
-
-    private function isSafeUrl(string $url): bool
-    {
-        // Step 1: decode HTML entities
-        $decoded = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        // Step 2: percent-decode
-        $decoded = rawurldecode($decoded);
-
-        // Step 3: reject control characters (including null byte)
-        if (preg_match('/[\x00-\x20\x7F]/', $decoded) === 1) {
-            return false;
-        }
-
-        // Step 4: reject protocol-relative and backslash-prefixed URLs
-        if (str_starts_with($decoded, '//') || str_starts_with($decoded, '\\')) {
-            return false;
-        }
-
-        // Step 5: parse the URL
-        $parts = parse_url($decoded);
-        if ($parts === false) {
-            return false;
-        }
-
-        // Step 6: extract and normalize scheme
-        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
-
-        // Step 7: check against allowlist
-        return in_array($scheme, self::SAFE_URL_SCHEMES, true);
     }
 }

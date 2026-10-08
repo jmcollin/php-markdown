@@ -239,9 +239,7 @@ final class HtmlRenderer
     private function renderLink(LinkNode $node): string
     {
         $titleAttr  = $node->title !== null ? ' title="' . $this->esc($node->title) . '"' : '';
-        $targetAttr = $this->linkTarget !== null ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
-        $relAttr    = $this->linkRel !== null ? ' rel="' . $this->esc($this->linkRel) . '"' : '';
-        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . $targetAttr . $relAttr . '>'
+        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . $this->targetAndRelAttrs() . '>'
             . $this->renderChildren($node->children)
             . '</a>';
     }
@@ -259,10 +257,28 @@ final class HtmlRenderer
         $href = $node->isEmail
             ? 'mailto:' . $this->esc($node->url)
             : $this->esc($node->url);
-        $text       = $this->esc($node->url);
-        $targetAttr = (!$node->isEmail && $this->linkTarget !== null) ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
-        $relAttr    = (!$node->isEmail && $this->linkRel !== null) ? ' rel="' . $this->esc($this->linkRel) . '"' : '';
-        return "<a href=\"{$href}\"{$targetAttr}{$relAttr}>{$text}</a>";
+        $text  = $this->esc($node->url);
+        $attrs = $node->isEmail ? '' : $this->targetAndRelAttrs();
+        return "<a href=\"{$href}\"{$attrs}>{$text}</a>";
+    }
+
+    /**
+     * target/rel attributes from the configured linkTarget/linkRel. target="_blank"
+     * always carries rel="noopener" (reverse tabnabbing), as HtmlSanitizer enforces
+     * for raw HTML links.
+     */
+    private function targetAndRelAttrs(): string
+    {
+        $attrs = $this->linkTarget !== null ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
+
+        $rel = $this->linkRel !== null ? (preg_split('/\s+/', trim($this->linkRel), -1, PREG_SPLIT_NO_EMPTY) ?: []) : [];
+        if (strtolower($this->linkTarget ?? '') === '_blank' && !in_array('noopener', array_map('strtolower', $rel), true)) {
+            $rel[] = 'noopener';
+        }
+        if ($rel !== []) {
+            $attrs .= ' rel="' . $this->esc(implode(' ', $rel)) . '"';
+        }
+        return $attrs;
     }
 
     private function renderTable(TableNode $node): string
