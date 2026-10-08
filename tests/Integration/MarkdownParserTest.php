@@ -131,6 +131,17 @@ final class MarkdownParserTest extends TestCase
         $this->assertNotEmpty($html);
     }
 
+    public function testMaxBytesIsEnforcedAfterNormalization(): void
+    {
+        // U+0958 (3 bytes) has no composed form: NFC turns it into 2 code points (6 bytes).
+        // 10 × 3 = 30 bytes fits the limit before normalization, 60 bytes does not after.
+        $parser = new MarkdownParser(maxBytes: 40);
+
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage('after Unicode normalization');
+        $parser->parse(str_repeat("\u{0958}", 10));
+    }
+
     // ── NFC normalisation ─────────────────────────────────────────────────────
 
     public function testNfcNormalisationConvertsNfdInput(): void
