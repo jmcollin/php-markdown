@@ -12,7 +12,8 @@ namespace PhpMarkdown\Lexer;
  */
 final class Lexer
 {
-    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.*)$/';
+    /** ATX heading (CommonMark §4.2): 0–3 spaces, 1–6 '#', then whitespace or end of line. */
+    private const PATTERN_HEADING           = '/^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
     private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
@@ -542,7 +543,8 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_HEADING, $line, $m)) {
-            $content = (string) preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2]));
+            // Strip the optional closing sequence: '#'s preceded by whitespace (or alone).
+            $content = (string) preg_replace('/(?:^|[ \t]+)#+[ \t]*$/', '', trim($m[2] ?? '', " \t"));
             return new Token(
                 TokenType::HEADING,
                 $content,
