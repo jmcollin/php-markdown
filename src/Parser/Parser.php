@@ -267,15 +267,16 @@ final class Parser
             $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs, $this->footnoteDefs);
             $i++;
 
-            // If the next token is a deeper-level list item, recurse.
+            // Deeper list items belong to this item. Several sub-lists may follow each
+            // other (e.g. an <ol> then a <ul>: changing type starts a new list), so keep
+            // recursing until the next token is no longer deeper.
             $nodeChildren = $inlineChildren;
-            if ($i < $count
+            while ($i < $count
                 && $tokens[$i]->type === TokenType::LIST_ITEM
                 && $tokens[$i]->meta['depth'] > $depth
                 && $depth < 32
             ) {
-                $subList      = $this->buildList($tokens, $i, $tokens[$i]->meta['depth']);
-                $nodeChildren = [...$inlineChildren, $subList];
+                $nodeChildren[] = $this->buildList($tokens, $i, $tokens[$i]->meta['depth']);
             }
 
             // Peek ahead for blank tokens. Consume only when the token after the blank run
