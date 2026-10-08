@@ -49,7 +49,8 @@ final class MarkdownParser
     }
 
     /**
-     * @throws ParseException if input exceeds maxBytes or is not valid UTF-8.
+     * @throws ParseException if input exceeds maxBytes (before or after NFC normalization)
+     *                        or is not valid UTF-8.
      */
     private function guard(string &$markdown): void
     {
@@ -63,6 +64,14 @@ final class MarkdownParser
         }
         $normalized = $this->normalizer->normalize($markdown);
         $markdown = $normalized !== false ? $normalized : $markdown;
+
+        // NFC can grow the input (e.g. U+0958 has no composed form and doubles in size):
+        // the limit applies to what the parser actually processes.
+        if (strlen($markdown) > $this->maxBytes) {
+            throw new ParseException(
+                sprintf('Input exceeds maximum allowed size of %d bytes after Unicode normalization.', $this->maxBytes),
+            );
+        }
     }
 
     /**
