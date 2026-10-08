@@ -24,6 +24,12 @@ final class InlineParser
 {
     private const SAFE_SCHEMES = ['http', 'https', 'mailto', ''];
 
+    /**
+     * Autolinks keep CommonMark's "any scheme" rule (ftp:, irc:, …) except these,
+     * which execute code or render attacker-controlled documents when followed.
+     */
+    private const SCRIPT_SCHEMES = ['javascript', 'vbscript', 'data'];
+
     /** Maximum nesting depth for recursive inline parsing (prevents stack overflow). */
     private const MAX_DEPTH = 64;
 
@@ -495,6 +501,13 @@ final class InlineParser
             if ($char === '<') {
                 // 1. URL autolink — MUST run before PATTERN_RAW_HTML_INLINE (see constant comment).
                 if (preg_match(self::PATTERN_AUTOLINK_URL, $text, $m, 0, $pos)) {
+                    $scheme = strtolower(substr($m[1], 0, (int) strpos($m[1], ':')));
+                    if (in_array($scheme, self::SCRIPT_SCHEMES, true)) {
+                        // <javascript:…>, <data:…>, <vbscript:…>: literal text (XSS prevention).
+                        $buffer .= $m[0];
+                        $pos    += strlen($m[0]);
+                        continue;
+                    }
                     $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new AutolinkNode($m[1], false);
                     $pos += strlen($m[0]);
@@ -607,6 +620,9 @@ final class InlineParser
         if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
             return false;
         }
+        // Browsers strip leading/trailing spaces from href/src before resolving the URL,
+        // so "< javascript:alert(1)>" must be judged on its trimmed form.
+        $url = trim($url, ' ');
         // Reject protocol-relative URLs.
         if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
             return false;
