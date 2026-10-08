@@ -613,7 +613,7 @@ final class Lexer
         }
         $isText = $this->isParagraphContinuation($content)
             || ($paragraphOpen && $content !== '' && !ctype_space($content) && !preg_match(self::PATTERN_HEADING, $content));
-        return [$isText && !preg_match(self::PATTERN_TABLE_SEPARATOR, $content), false];
+        return [$isText, false];
     }
 
     private function matchLine(string $line): Token
