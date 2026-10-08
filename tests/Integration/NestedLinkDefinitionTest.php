@@ -27,8 +27,7 @@ final class NestedLinkDefinitionTest extends TestCase
             ],
             'definition in a column' => [
                 ":::columns\n[b]: /col\n|||\nx\n:::\n\n[b]",
-                '<div class="grid grid-cols-2 gap-4"><div class="min-w-0"></div><div class="min-w-0"><p>x</p>' . "\n"
-                    . "</div></div><p><a href=\"/col\">b</a></p>\n",
+                "<div class=\"grid grid-cols-2 gap-4\">\n<div class=\"min-w-0\">\n</div>\n<div class=\"min-w-0\">\n<p>x</p>\n</div>\n</div>\n<p><a href=\"/col\">b</a></p>\n",
             ],
             'used inside the same blockquote' => [
                 "> [q]\n>\n> [q]: /in-quote",
