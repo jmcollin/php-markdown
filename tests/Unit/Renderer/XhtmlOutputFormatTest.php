@@ -135,6 +135,39 @@ final class XhtmlOutputFormatTest extends TestCase
 
     // ── Inline nodes: no trailing newline of their own ────────────────────────
 
+    // ── Extensions: task lists, tables, mermaid, columns, footnotes ──────────
+
+    public function testTaskListCheckboxIsSelfClosing(): void
+    {
+        $out = $this->parseAndRender("- [x] a\n- [ ] b");
+        $this->assertStringContainsString('<input type="checkbox" checked="" disabled="" />', $out);
+        $this->assertStringContainsString('<input type="checkbox" disabled="" />', $out);
+    }
+
+    public function testTableHasOneElementPerLine(): void
+    {
+        $out = $this->parseAndRender("| a |\n|---|\n| b |");
+        $this->assertSame(
+            "<table>\n<thead>\n<tr>\n<th>a</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>b</td>\n</tr>\n</tbody>\n</table>\n",
+            $out,
+        );
+    }
+
+    public function testMermaidBlockEndsWithNewline(): void
+    {
+        $out = $this->parseAndRender("```mermaid\nA-->B\n```\npara");
+        $this->assertSame("<div class=\"mermaid\">A--&gt;B</div>\n<p>para</p>\n", $out);
+    }
+
+    public function testColumnsAndFootnotesEndWithNewline(): void
+    {
+        $columns = $this->parseAndRender(":::columns\na\n|||\nb\n:::");
+        $this->assertStringEndsWith("</div>\n</div>\n", $columns);
+
+        $footnotes = $this->parseAndRender("x[^1]\n\n[^1]: note");
+        $this->assertStringEndsWith("</li>\n</ol>\n</section>\n", $footnotes);
+    }
+
     public function testInlineNodesHaveNoTrailingNewline(): void
     {
         // Strong, link, and code are all inline — the outer <p> carries the \n,

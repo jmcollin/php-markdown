@@ -178,7 +178,8 @@ final class HtmlRenderer
             }
             return '<li>' . $content . "</li>\n";
         }
-        $checkbox = '<input type="checkbox" disabled' . ($node->checked ? ' checked' : '') . '>';
+        // Same markup as cmark-gfm: XHTML-style void element, boolean attributes as ="".
+        $checkbox = '<input type="checkbox"' . ($node->checked ? ' checked=""' : '') . ' disabled="" />';
         return '<li>' . $checkbox . ' ' . $content . "</li>\n";
     }
 
@@ -224,7 +225,7 @@ final class HtmlRenderer
         $lang = preg_replace('/[^A-Za-z0-9_-]/', '', $node->language);
 
         if ($lang === 'mermaid') {
-            return '<div class="mermaid">' . $this->esc($node->content) . '</div>';
+            return '<div class="mermaid">' . $this->esc($node->content) . "</div>\n";
         }
 
         $classAttr = ($lang ?? '') !== ''
@@ -273,14 +274,15 @@ final class HtmlRenderer
                 $body .= $this->renderTableRow($row);
             }
         }
-        $html = '<table>';
+        // Block-level layout of cmark-gfm: one element per line.
+        $html = "<table>\n";
         if ($header !== '') {
-            $html .= '<thead>' . $header . '</thead>';
+            $html .= "<thead>\n" . $header . "</thead>\n";
         }
         if ($body !== '') {
-            $html .= '<tbody>' . $body . '</tbody>';
+            $html .= "<tbody>\n" . $body . "</tbody>\n";
         }
-        return $html . '</table>';
+        return $html . "</table>\n";
     }
 
     private function renderTableRow(TableRowNode $node): string
@@ -289,7 +291,7 @@ final class HtmlRenderer
             fn(TableCellNode $cell) => $this->renderTableCell($cell, $node->isHeader),
             $node->cells,
         ));
-        return '<tr>' . $cells . '</tr>';
+        return "<tr>\n" . $cells . "</tr>\n";
     }
 
     private function renderTableCell(TableCellNode $node, bool $isHeader = false): string
@@ -299,15 +301,15 @@ final class HtmlRenderer
         // any future refactor from accidentally passing raw user input into an HTML attribute.
         $align     = in_array($node->align, ['left', 'right', 'center'], true) ? $node->align : '';
         $alignAttr = $align !== '' ? ' align="' . $align . '"' : '';
-        return '<' . $tag . $alignAttr . '>' . $this->renderInline($node->children) . '</' . $tag . '>';
+        return '<' . $tag . $alignAttr . '>' . $this->renderInline($node->children) . '</' . $tag . ">\n";
     }
 
     private function renderColumns(ColumnsNode $node): string
     {
-        return '<div class="grid grid-cols-2 gap-4">'
-            . '<div class="min-w-0">' . $this->renderChildren($node->leftChildren) . '</div>'
-            . '<div class="min-w-0">' . $this->renderChildren($node->rightChildren) . '</div>'
-            . '</div>';
+        return "<div class=\"grid grid-cols-2 gap-4\">\n"
+            . "<div class=\"min-w-0\">\n" . $this->renderChildren($node->leftChildren) . "</div>\n"
+            . "<div class=\"min-w-0\">\n" . $this->renderChildren($node->rightChildren) . "</div>\n"
+            . "</div>\n";
     }
 
     private function renderFootnoteRef(FootnoteRefNode $node): string
@@ -325,7 +327,7 @@ final class HtmlRenderer
             fn(FootnoteDefinitionNode $def) => $this->renderFootnoteDefinition($def),
             $node->definitions,
         ));
-        return '<section class="footnotes"><ol>' . $items . '</ol></section>';
+        return "<section class=\"footnotes\">\n<ol>\n" . $items . "</ol>\n</section>\n";
     }
 
     private function renderFootnoteDefinition(FootnoteDefinitionNode $node): string
@@ -335,7 +337,7 @@ final class HtmlRenderer
             fn(string $id) => '<a href="#' . $id . '">↩</a>',
             $node->backLinkIds,
         ));
-        return '<li id="fn-' . $node->number . '">' . $body . ' ' . $backLinks . '</li>';
+        return '<li id="fn-' . $node->number . '">' . $body . ' ' . $backLinks . "</li>\n";
     }
 
     private function esc(string $value): string
