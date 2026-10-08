@@ -373,7 +373,7 @@ final class Parser
         $filtered = [];
         foreach ($tokens as $token) {
             if ($token->type === TokenType::LINK_DEFINITION) {
-                $key = mb_strtolower($token->meta['label'], 'UTF-8');
+                $key = InlineParser::normalizeLabel($token->meta['label']);
                 // First definition wins (CommonMark spec §4.7)
                 if (!isset($refs[$key])) {
                     $refs[$key] = [
