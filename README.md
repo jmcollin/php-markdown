@@ -168,7 +168,7 @@ $html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
 | Paragraph | plain text | `<p>` |
 | Blockquote (nested) | `> text` | `<blockquote>` |
 | Unordered list | `- item` / `* item` / `+ item` | `<ul><li>` |
-| Ordered list | `1. item` | `<ol><li>` |
+| Ordered list | `1. item` / `1) item` (start number kept: `3. item`) | `<ol><li>` / `<ol start="3">` |
 | Nested lists | indented `- item` inside list item | `<ul>` inside `<li>` |
 | Task list | `- [x] done` / `- [ ] todo` | `<li><input type="checkbox" …>` |
 | Fenced code block | ```` ```lang … ``` ```` | `<pre><code class="language-*">` |
