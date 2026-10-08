@@ -716,7 +716,7 @@ final class Lexer
             );
         }
 
-        // URL validation is intentionally deferred to InlineParser::isSafeUrl() at resolution time.
+        // URL validation is intentionally deferred to UrlValidator::isSafe() at resolution time.
         if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
             // Groups: 2=angle-bracket URL content (stripped), 3=bare URL.
             // When the angle-bracket branch <(...)> matches, $m[3] is absent or empty ''.
