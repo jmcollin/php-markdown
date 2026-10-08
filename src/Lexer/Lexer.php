@@ -383,8 +383,8 @@ final class Lexer
             if ($lastToken instanceof Token
                 && $lastToken->type === TokenType::LIST_ITEM
                 && $pendingLines === []
-                && $line !== '' && !ctype_space($line)
-                && !$this->startsBlock($line)
+                && $this->isParagraphContinuation($line)
+                && !preg_match(self::PATTERN_FOOTNOTE_DEF, $line)
             ) {
                 // Joined once at the end: rebuilding the token per line would be quadratic.
                 $itemContinuations[array_key_last($tokens)][] = ltrim($line, " \t");
@@ -616,20 +616,6 @@ final class Lexer
         }
         $cache = [$count, $result];
         return $result;
-    }
-
-    /** Whether $line starts a block that ends a paragraph (so it cannot continue one). */
-    private function startsBlock(string $line): bool
-    {
-        return preg_match(self::PATTERN_FENCED_OPEN, $line) === 1
-            || preg_match($this->patternHtmlBlockStart, $line) === 1
-            || preg_match(self::PATTERN_HORIZONTAL_RULE, $line) === 1
-            || preg_match(self::PATTERN_HEADING, $line) === 1
-            || preg_match(self::PATTERN_BLOCKQUOTE, $line) === 1
-            || preg_match(self::PATTERN_UNORDERED_LIST, $line) === 1
-            || preg_match(self::PATTERN_ORDERED_LIST, $line) === 1
-            || preg_match(self::PATTERN_COLUMNS_OPEN, $line) === 1
-            || preg_match(self::PATTERN_FOOTNOTE_DEF, $line) === 1;
     }
 
     /** @return array{string, ?bool} */
