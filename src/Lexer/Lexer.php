@@ -22,8 +22,6 @@ final class Lexer
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
     private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';
-    private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
-    private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
     private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
     private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
     private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
@@ -109,7 +107,17 @@ final class Lexer
         $footnoteBodyLabel  = '';
         $footnoteBodyLines  = [];
 
-        foreach ($lines as $raw) {
+        // GFM table state: number of columns of the open table (0 = no table).
+        $tableColumns = 0;
+        $skipNextLine = false; // delimiter row already consumed with its header
+
+        foreach ($lines as $lineIdx => $raw) {
+            if ($skipNextLine) {
+                $skipNextLine = false;
+                continue;
+            }
+            $inTable      = $tableColumns;
+            $tableColumns = 0;
             $line     = rtrim($raw, "\r");
             $expanded = $this->expandTabs($line);
 
@@ -373,6 +381,35 @@ final class Lexer
             }
 
             $token = $this->matchLine($line);
+
+            // GFM tables: a header row is only a table when the next line is a delimiter
+            // row with the same number of cells; rows then continue until a blank line
+            // or the start of another block.
+            if ($token->type === TokenType::PARAGRAPH) {
+                if ($inTable > 0) {
+                    $tokens[] = new Token(TokenType::TABLE_ROW, $line);
+                    $tableColumns = $inTable;
+                    continue;
+                }
+                $nextLine = isset($lines[$lineIdx + 1]) ? rtrim($lines[$lineIdx + 1], "\r") : null;
+                if ($nextLine !== null
+                    && TableCells::hasPipe($line)
+                    && !str_starts_with($this->expandTabs($nextLine), '    ')
+                ) {
+                    $aligns = TableCells::alignments($nextLine);
+                    if ($aligns !== null && count($aligns) === count(TableCells::split($line))) {
+                        foreach ($pendingLines as $pt) {
+                            $tokens[] = $pt;
+                        }
+                        $pendingLines   = [];
+                        $tokens[]       = new Token(TokenType::TABLE_ROW, $line);
+                        $tokens[]       = new Token(TokenType::TABLE_SEPARATOR, $nextLine);
+                        $tableColumns   = count($aligns);
+                        $skipNextLine   = true;
+                        continue;
+                    }
+                }
+            }
 
             // A LINK_DEFINITION with no title may have its title on the next line (CommonMark §4.7).
             if ($token->type === TokenType::LINK_DEFINITION && $token->meta['title'] === null) {
@@ -667,15 +704,6 @@ final class Lexer
                 $content,
                 ['ordered' => true, 'depth' => (int) floor(strlen($m[1]) / 2), 'checked' => $checked],
             );
-        }
-
-        if (str_contains($line, '|')) {
-            if (preg_match(self::PATTERN_TABLE_SEPARATOR, $line)) {
-                return new Token(TokenType::TABLE_SEPARATOR, $line);
-            }
-            if (preg_match(self::PATTERN_TABLE_ROW, $line)) {
-                return new Token(TokenType::TABLE_ROW, $line);
-            }
         }
 
         // Footnote definition: [^label]: body — must run before LINK_DEFINITION
