@@ -529,7 +529,7 @@ final class RendererTest extends TestCase
 
     public function testRawHtmlInlineNodeVerbatimWhenAllowed(): void
     {
-        // Opt-in mode: inline HTML is emitted verbatim (no sanitizer — avoids DOM auto-close).
+        // Opt-in mode: the paragraph's inline run goes through the sanitizer; safe tags survive.
         $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
             new ParagraphNode([new RawHtmlInlineNode('<span class="x">')]),
         ]));
@@ -538,7 +538,7 @@ final class RendererTest extends TestCase
 
     public function testRawHtmlInlineNodeDangerousAttrStrippedWhenAllowed(): void
     {
-        // Opt-in mode: on* event attributes are regex-stripped from inline HTML.
+        // Opt-in mode: the sanitizer removes on* event attributes from inline HTML.
         // Tag is preserved; only the dangerous attribute is removed.
         $out = (new HtmlRenderer(allowRawHtml: true))->render(new DocumentNode([
             new ParagraphNode([new RawHtmlInlineNode('<span onclick="evil()">')]),

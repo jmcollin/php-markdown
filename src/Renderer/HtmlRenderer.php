@@ -43,6 +43,10 @@ use PhpMarkdown\Sanitizer\HtmlSanitizer;
  * XSS rule: every user-supplied string passes through esc() before output.
  * This includes TextNode text, code content, and all HTML attributes.
  * Raw HTML is escaped by default; pass allowRawHtml: true to enable sanitized pass-through.
+ * In that mode, every inline run containing raw HTML (paragraph, heading, table cell,
+ * list item text, footnote body) is rendered first, then passed as one fragment
+ * through HtmlSanitizer, so tags split across several RawHtmlInlineNodes are
+ * sanitized together.
  */
 final class HtmlRenderer
 {
@@ -63,7 +67,7 @@ final class HtmlRenderer
     {
         return match (true) {
             $node instanceof HeadingNode      => $this->renderHeading($node),
-            $node instanceof ParagraphNode    => '<p>' . $this->renderChildren($node->children) . "</p>\n",
+            $node instanceof ParagraphNode    => '<p>' . $this->renderInline($node->children) . "</p>\n",
             $node instanceof BlockquoteNode   => "<blockquote>\n" . $this->renderChildren($node->children) . "</blockquote>\n",
             $node instanceof ListNode         => $this->renderList($node),
             $node instanceof ListItemNode     => $this->renderListItem($node),
@@ -89,11 +93,11 @@ final class HtmlRenderer
             $node instanceof ImageNode        => $this->renderImage($node),
             $node instanceof TableNode        => $this->renderTable($node),
             $node instanceof TableRowNode     => $this->renderTableRow($node),
-            // Inline HTML: regex-strip dangerous attrs if allowRawHtml (DOMDocument auto-closes fragments),
-            // else escape. Strips on*, style, and javascript:/data: URL attrs.
+            // Inline HTML: emitted as-is if allowRawHtml — the enclosing inline run is then
+            // sanitized as a whole by renderInline() — else escaped.
             $node instanceof RawHtmlInlineNode =>
                 $this->allowRawHtml
-                    ? $this->stripInlineAttrs($node->content)
+                    ? $node->content
                     : $this->esc($node->content),
             $node instanceof AutolinkNode           => $this->renderAutolink($node),
             $node instanceof FootnoteRefNode        => $this->renderFootnoteRef($node),
@@ -111,10 +115,47 @@ final class HtmlRenderer
         return implode('', array_map($this->renderNode(...), $nodes));
     }
 
+    /**
+     * Render a run of inline nodes. When raw HTML is allowed and the run contains
+     * a RawHtmlInlineNode, the whole rendered run goes through the DOM sanitizer:
+     * a raw inline tag must never reach the output without it.
+     *
+     * @param NodeInterface[] $nodes
+     */
+    private function renderInline(array $nodes): string
+    {
+        $html = $this->renderChildren($nodes);
+        if ($this->allowRawHtml && $this->containsRawHtmlInline($nodes)) {
+            return $this->sanitizer->sanitize($html);
+        }
+        return $html;
+    }
+
+    /**
+     * @param NodeInterface[] $nodes
+     */
+    private function containsRawHtmlInline(array $nodes): bool
+    {
+        foreach ($nodes as $node) {
+            if ($node instanceof RawHtmlInlineNode) {
+                return true;
+            }
+            if (($node instanceof LinkNode
+                    || $node instanceof EmphasisNode
+                    || $node instanceof StrongNode
+                    || $node instanceof StrikethroughNode)
+                && $this->containsRawHtmlInline($node->children)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function renderHeading(HeadingNode $node): string
     {
         $tag = 'h' . $node->level;
-        return '<' . $tag . '>' . $this->renderChildren($node->children) . '</' . $tag . ">\n";
+        return '<' . $tag . '>' . $this->renderInline($node->children) . '</' . $tag . ">\n";
     }
 
     private function renderList(ListNode $node): string
@@ -146,10 +187,6 @@ final class HtmlRenderer
      */
     private function renderListItemContent(array $children, bool $loose): string
     {
-        if (!$loose) {
-            return $this->renderChildren($children);
-        }
-
         $inlinePart = [];
         $blockPart  = [];
         $hitBlock   = false;
@@ -166,7 +203,8 @@ final class HtmlRenderer
 
         $html = '';
         if ($inlinePart !== []) {
-            $html .= '<p>' . $this->renderChildren($inlinePart) . "</p>\n";
+            $inline = $this->renderInline($inlinePart);
+            $html  .= $loose ? '<p>' . $inline . "</p>\n" : $inline;
         }
         foreach ($blockPart as $block) {
             $html .= $this->renderNode($block);
@@ -261,7 +299,7 @@ final class HtmlRenderer
         // any future refactor from accidentally passing raw user input into an HTML attribute.
         $align     = in_array($node->align, ['left', 'right', 'center'], true) ? $node->align : '';
         $alignAttr = $align !== '' ? ' align="' . $align . '"' : '';
-        return '<' . $tag . $alignAttr . '>' . $this->renderChildren($node->children) . '</' . $tag . '>';
+        return '<' . $tag . $alignAttr . '>' . $this->renderInline($node->children) . '</' . $tag . '>';
     }
 
     private function renderColumns(ColumnsNode $node): string
@@ -270,21 +308,6 @@ final class HtmlRenderer
             . '<div class="min-w-0">' . $this->renderChildren($node->leftChildren) . '</div>'
             . '<div class="min-w-0">' . $this->renderChildren($node->rightChildren) . '</div>'
             . '</div>';
-    }
-
-    private function stripInlineAttrs(string $tag): string
-    {
-        // Strip all on* event handler attributes (onclick, onerror, onload, etc.).
-        $tag = preg_replace('/\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
-        // Strip style attribute (CSS expression / url(javascript:...) vectors).
-        $tag = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
-        // Strip href/src/action with javascript: or data: scheme.
-        $tag = preg_replace(
-            '/\s+(?:href|src|action|formaction)\s*=\s*(?:"(?:javascript|data)[^"]*"|\'(?:javascript|data)[^\']*\'|(?:javascript|data)[^\s>\/]*)/i',
-            '',
-            $tag,
-        ) ?? $tag;
-        return $tag;
     }
 
     private function renderFootnoteRef(FootnoteRefNode $node): string
@@ -307,7 +330,7 @@ final class HtmlRenderer
 
     private function renderFootnoteDefinition(FootnoteDefinitionNode $node): string
     {
-        $body = $this->renderChildren($node->children);
+        $body = $this->renderInline($node->children);
         $backLinks = implode(' ', array_map(
             fn(string $id) => '<a href="#' . $id . '">↩</a>',
             $node->backLinkIds,

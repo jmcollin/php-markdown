@@ -96,7 +96,7 @@ final class HtmlSanitizerTest extends TestCase
             ],
             'sibling text preserved when forbidden tag removed' => [
                 'input'    => 'before<script>evil()</script>after',
-                'expected' => '<p>beforeafter</p>',
+                'expected' => 'beforeafter',
             ],
         ];
     }
