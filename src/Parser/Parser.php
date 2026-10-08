@@ -371,7 +371,7 @@ final class Parser
     {
         $refs = [];
         $filtered = [];
-        foreach ($tokens as $token) {
+        foreach ($this->withContainerDefinitions($tokens) as $token) {
             if ($token->type === TokenType::LINK_DEFINITION) {
                 $key = InlineParser::normalizeLabel($token->meta['label']);
                 // First definition wins (CommonMark spec §4.7)
@@ -386,6 +386,60 @@ final class Parser
             }
         }
         return ['refs' => $refs, 'tokens' => $filtered];
+    }
+
+    /**
+     * Return $tokens with, after each blockquote run and columns container, the
+     * LINK_DEFINITION tokens found inside it. Definitions are document-global
+     * (CommonMark §4.7) even when nested in a container, but container content is
+     * only lexed later (per block), so they would otherwise never be registered.
+     * The nested definition tokens are consumed by extractLinkDefinitions().
+     *
+     * @param  Token[] $tokens
+     * @return Token[]
+     */
+    private function withContainerDefinitions(array $tokens, int $depth = 0): array
+    {
+        if ($depth >= 32) {
+            return $tokens;
+        }
+
+        $out   = [];
+        $quote = [];
+        foreach ($tokens as $token) {
+            if ($token->type === TokenType::BLOCKQUOTE) {
+                $out[]   = $token;
+                $quote[] = $token->content;
+                continue;
+            }
+            if ($quote !== []) {
+                array_push($out, ...$this->nestedLinkDefinitions(implode("\n", $quote), $depth));
+                $quote = [];
+            }
+            $out[] = $token;
+            if ($token->type === TokenType::COLUMNS_CONTAINER) {
+                array_push($out, ...$this->nestedLinkDefinitions($token->meta['left_raw'], $depth));
+                array_push($out, ...$this->nestedLinkDefinitions($token->meta['right_raw'], $depth));
+            }
+        }
+        if ($quote !== []) {
+            array_push($out, ...$this->nestedLinkDefinitions(implode("\n", $quote), $depth));
+        }
+        return $out;
+    }
+
+    /**
+     * Lex container content and keep only its LINK_DEFINITION tokens (recursively).
+     *
+     * @return Token[]
+     */
+    private function nestedLinkDefinitions(string $markdown, int $depth): array
+    {
+        $tokens = $this->withContainerDefinitions((new Lexer())->tokenize($markdown), $depth + 1);
+        return array_values(array_filter(
+            $tokens,
+            static fn(Token $t): bool => $t->type === TokenType::LINK_DEFINITION,
+        ));
     }
 
     /**
