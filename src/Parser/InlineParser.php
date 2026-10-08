@@ -165,8 +165,7 @@ final class InlineParser
                 $closer = str_repeat('`', $btCount);
                 $closePos = strpos($text, $closer, $tmp);
                 if ($closePos !== false) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $raw = substr($text, $tmp, $closePos - $tmp);
                     // CommonMark §6.1 — three-step normalisation
                     // Step 1: replace line endings with single space
@@ -259,8 +258,7 @@ final class InlineParser
                 }
 
                 // Valid entity: flush pending buffer, emit decoded node, advance.
-                $tokens  = $this->flushBuffer($buffer, $tokens);
-                $buffer  = '';
+                $this->flushBuffer($buffer, $tokens);
                 $tokens[] = new HtmlEntityNode($decodedSafe);
                 $pos    += strlen($raw);
                 continue;
@@ -270,8 +268,7 @@ final class InlineParser
             if ($char === '!' && ($pos + 1) < $len && $text[$pos + 1] === '[') {
                 // Angle-bracket URL form: ![alt](<src> or <src "title">) — checked first.
                 if (preg_match(self::PATTERN_IMAGE_ANGLE, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $src = stripslashes($m[2]);
                     if ($this->isSafeAngleBracketUrl($src)) {
                         $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
@@ -287,8 +284,7 @@ final class InlineParser
                     continue;
                 }
                 if (preg_match(self::PATTERN_IMAGE, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     if ($this->isSafeUrl($m[2])) {
                         $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
                         $tokens[] = new ImageNode(
@@ -304,8 +300,7 @@ final class InlineParser
                 }
                 // Image reference: ![alt][ref] or collapsed ![alt][]
                 if ($this->refs !== [] && preg_match(self::PATTERN_REF_IMAGE, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
                     if (isset($this->refs[$lookupKey])) {
                         $def = $this->refs[$lookupKey];
@@ -332,8 +327,7 @@ final class InlineParser
                         $lookupKey = mb_strtolower($alt, 'UTF-8');
                         if (isset($this->refs[$lookupKey])) {
                             $def = $this->refs[$lookupKey];
-                            $tokens = $this->flushBuffer($buffer, $tokens);
-                            $buffer = '';
+                            $this->flushBuffer($buffer, $tokens);
                             if ($this->isSafeUrl($def['href'])) {
                                 $tokens[] = new ImageNode(
                                     src: $def['href'],
@@ -369,8 +363,7 @@ final class InlineParser
                             /** @psalm-suppress PossiblyUndefinedArrayOffset */
                             $defNumber  = $this->footnoteDefinitions[$label]['number'];
                             $occurrence = $this->footnoteDefinitions[$label]['occurrences'];
-                            $tokens = $this->flushBuffer($buffer, $tokens);
-                            $buffer = '';
+                            $this->flushBuffer($buffer, $tokens);
                             $tokens[] = new FootnoteRefNode(
                                 number:     $defNumber,
                                 occurrence: $occurrence,
@@ -385,8 +378,7 @@ final class InlineParser
 
                 // 1a. Angle-bracket URL form: [text](<url> or <url "title">) — checked first.
                 if (preg_match(self::PATTERN_LINK_ANGLE, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $href = stripslashes($m[2]);
                     if ($this->isSafeAngleBracketUrl($href)) {
                         $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
@@ -404,8 +396,7 @@ final class InlineParser
 
                 // 1b. Inline link — highest priority (CommonMark spec §6.3)
                 if (preg_match(self::PATTERN_LINK, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $href = $m[2];
                     if ($this->isSafeUrl($href)) {
                         $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
@@ -423,8 +414,7 @@ final class InlineParser
 
                 // 2. Reference link: [text][ref] or collapsed [text][]
                 if (preg_match(self::PATTERN_REF_LINK, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
                     if (isset($this->refs[$lookupKey])) {
                         $def = $this->refs[$lookupKey];
@@ -453,8 +443,7 @@ final class InlineParser
                         $lookupKey = mb_strtolower($label, 'UTF-8');
                         if (isset($this->refs[$lookupKey])) {
                             $def = $this->refs[$lookupKey];
-                            $tokens = $this->flushBuffer($buffer, $tokens);
-                            $buffer = '';
+                            $this->flushBuffer($buffer, $tokens);
                             if ($this->isSafeUrl($def['href'])) {
                                 $tokens[] = new LinkNode(
                                     href: $def['href'],
@@ -477,8 +466,7 @@ final class InlineParser
                 if ($closePos !== false) {
                     $inner = substr($text, $pos + 2, $closePos - $pos - 2);
                     if ($inner !== '') {
-                        $tokens = $this->flushBuffer($buffer, $tokens);
-                        $buffer = '';
+                        $this->flushBuffer($buffer, $tokens);
                         $tokens[] = new StrikethroughNode($this->scan($inner, $depth + 1));
                         $pos = $closePos + 2;
                         continue;
@@ -491,8 +479,7 @@ final class InlineParser
 
             // ── Emphasis / Strong: * and _ runs (CommonMark §6.2 + Appendix A) ──
             if ($char === '*' || $char === '_') {
-                $tokens = $this->flushBuffer($buffer, $tokens);
-                $buffer = '';
+                $this->flushBuffer($buffer, $tokens);
                 $runLen = 0;
                 while (($pos + $runLen) < $len && $text[$pos + $runLen] === $char) {
                     $runLen++;
@@ -508,24 +495,21 @@ final class InlineParser
             if ($char === '<') {
                 // 1. URL autolink — MUST run before PATTERN_RAW_HTML_INLINE (see constant comment).
                 if (preg_match(self::PATTERN_AUTOLINK_URL, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new AutolinkNode($m[1], false);
                     $pos += strlen($m[0]);
                     continue;
                 }
                 // 2. Email autolink.
                 if (preg_match(self::PATTERN_AUTOLINK_EMAIL, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new AutolinkNode($m[1], true);
                     $pos += strlen($m[0]);
                     continue;
                 }
                 // 3. Raw inline HTML (§6.6) — existing logic unchanged.
                 if (preg_match(self::PATTERN_RAW_HTML_INLINE, $text, $m, 0, $pos)) {
-                    $tokens = $this->flushBuffer($buffer, $tokens);
-                    $buffer = '';
+                    $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new RawHtmlInlineNode($m[0]);
                     $pos += strlen($m[0]);
                     continue;
@@ -537,7 +521,7 @@ final class InlineParser
             $pos++;
         }
 
-        $tokens = $this->flushBuffer($buffer, $tokens);
+        $this->flushBuffer($buffer, $tokens);
         return (new DelimiterStack())->resolve($tokens);
     }
 
@@ -567,8 +551,7 @@ final class InlineParser
         $next = $text[$pos + 1];
 
         if (str_contains(self::ESCAPABLE_CHARS, $next)) {
-            $tokens  = $this->flushBuffer($buffer, $tokens);
-            $buffer  = '';
+            $this->flushBuffer($buffer, $tokens);
             $tokens[] = new TextNode($next);
             return $pos + 2;
         }
@@ -578,15 +561,18 @@ final class InlineParser
     }
 
     /**
+     * Append the pending text buffer as a TextNode and clear it.
+     * Both arguments are taken by reference: passing $tokens by value and returning it
+     * would copy the whole array on every flush, making inline parsing quadratic.
+     *
      * @param list<DelimiterRun|InlineNodeInterface> $tokens
-     * @return list<DelimiterRun|InlineNodeInterface>
      */
-    private function flushBuffer(string $buffer, array $tokens): array
+    private function flushBuffer(string &$buffer, array &$tokens): void
     {
         if ($buffer !== '') {
             $tokens[] = new TextNode($buffer);
+            $buffer   = '';
         }
-        return $tokens;
     }
 
     private function isSafeUrl(string $url): bool
