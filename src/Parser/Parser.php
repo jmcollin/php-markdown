@@ -6,6 +6,7 @@ namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Exception\ParseException;
 use PhpMarkdown\Lexer\Lexer;
+use PhpMarkdown\Lexer\TableCells;
 use PhpMarkdown\Lexer\Token;
 use PhpMarkdown\Lexer\TokenType;
 use PhpMarkdown\Node\Block\BlockquoteNode;
@@ -307,69 +308,56 @@ final class Parser
         $headerCells = $this->parseCells($tokens[$i]->content);
         $i++;
 
-        // Separator row — extract alignment, advance
+        // Delimiter row — the Lexer only emits a table when it is present and valid.
         $aligns = [];
         if ($i < $count && $tokens[$i]->type === TokenType::TABLE_SEPARATOR) {
-            $aligns = $this->parseAlignments($tokens[$i]->content);
+            $aligns = TableCells::alignments($tokens[$i]->content) ?? [];
             $i++;
         }
+        $columns = count($headerCells);
 
-        $rows[] = new TableRowNode(
-            cells: array_map(
-                fn(string $cell, int $idx) => new TableCellNode(
-                    children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
-                    align: $aligns[$idx] ?? '',
-                ),
-                $headerCells,
-                array_keys($headerCells),
-            ),
-            isHeader: true,
-        );
+        $rows[] = $this->buildTableRow($headerCells, $aligns, $columns, isHeader: true);
 
         // Body rows
         while ($i < $count && $tokens[$i]->type === TokenType::TABLE_ROW) {
-            $cells = $this->parseCells($tokens[$i]->content);
-            $rows[] = new TableRowNode(
-                cells: array_map(
-                    fn(string $cell, int $idx) => new TableCellNode(
-                        children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
-                        align: $aligns[$idx] ?? '',
-                    ),
-                    $cells,
-                    array_keys($cells),
-                ),
-                isHeader: false,
-            );
+            $rows[] = $this->buildTableRow($this->parseCells($tokens[$i]->content), $aligns, $columns, isHeader: false);
             $i++;
         }
 
         return new TableNode(rows: $rows);
     }
 
-    /** @return string[] */
-    private function parseCells(string $line): array
+    /**
+     * GFM: every row has exactly as many cells as the header — missing cells are
+     * empty, excess cells are ignored.
+     *
+     * @param list<string> $cells
+     * @param list<string> $aligns
+     */
+    private function buildTableRow(array $cells, array $aligns, int $columns, bool $isHeader): TableRowNode
     {
-        $line = trim($line, ' |');
-        return array_map(trim(...), explode('|', $line));
+        $nodes = [];
+        for ($idx = 0; $idx < $columns; $idx++) {
+            $nodes[] = new TableCellNode(
+                children: $this->inlineParser->parse($cells[$idx] ?? '', $this->linkRefs, $this->footnoteDefs),
+                align: $aligns[$idx] ?? '',
+            );
+        }
+        return new TableRowNode(cells: $nodes, isHeader: $isHeader);
     }
 
-    /** @return string[] */
-    private function parseAlignments(string $separator): array
+    /**
+     * Split a row on unescaped pipes; an escaped pipe becomes a literal '|' before
+     * inline parsing, including inside code spans (GFM §4.10).
+     *
+     * @return list<string>
+     */
+    private function parseCells(string $line): array
     {
-        $separator = trim($separator, ' |');
-        $aligns = [];
-        foreach (explode('|', $separator) as $col) {
-            $col = trim($col);
-            $left  = str_starts_with($col, ':');
-            $right = str_ends_with($col, ':');
-            $aligns[] = match (true) {
-                $left && $right => 'center',
-                $right          => 'right',
-                $left           => 'left',
-                default         => '',
-            };
-        }
-        return $aligns;
+        return array_map(
+            static fn(string $cell): string => str_replace('\\|', '|', $cell),
+            TableCells::split($line),
+        );
     }
 
     /**

@@ -161,12 +161,13 @@ final class ColumnsLexerTest extends TestCase
         }
     }
 
-    public function testPipeTripleOutsideColumnsBlockProducesTableSeparator(): void
+    public function testPipeTripleOutsideColumnsBlockIsParagraph(): void
     {
+        // Outside a columns block, "|||" is not a table either (no header/delimiter pair).
         $tokens = $this->lexer->tokenize("|||");
 
         $this->assertCount(1, $tokens);
-        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[0]->type);
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
     }
 
     // -------------------------------------------------------------------------
