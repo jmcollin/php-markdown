@@ -6,12 +6,16 @@ namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Node\Inline\AutolinkNode;
 use PhpMarkdown\Node\Inline\CodeNode;
+use PhpMarkdown\Node\Inline\EmphasisNode;
 use PhpMarkdown\Node\Inline\FootnoteRefNode;
+use PhpMarkdown\Node\Inline\HardBreakNode;
 use PhpMarkdown\Node\Inline\HtmlEntityNode;
 use PhpMarkdown\Node\Inline\ImageNode;
 use PhpMarkdown\Node\Inline\LinkNode;
 use PhpMarkdown\Node\Inline\RawHtmlInlineNode;
+use PhpMarkdown\Node\Inline\SoftBreakNode;
 use PhpMarkdown\Node\Inline\StrikethroughNode;
+use PhpMarkdown\Node\Inline\StrongNode;
 use PhpMarkdown\Node\Inline\TextNode;
 use PhpMarkdown\Node\InlineNodeInterface;
 
@@ -23,6 +27,12 @@ use PhpMarkdown\Node\InlineNodeInterface;
 final class InlineParser
 {
     private const SAFE_SCHEMES = ['http', 'https', 'mailto', ''];
+
+    /**
+     * Autolinks keep CommonMark's "any scheme" rule (ftp:, irc:, …) except these,
+     * which execute code or render attacker-controlled documents when followed.
+     */
+    private const SCRIPT_SCHEMES = ['javascript', 'vbscript', 'data'];
 
     /** Maximum nesting depth for recursive inline parsing (prevents stack overflow). */
     private const MAX_DEPTH = 64;
@@ -40,24 +50,6 @@ final class InlineParser
      */
     private const ESCAPABLE_CHARS = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
 
-    // Patterns use \G + offset param instead of substr() to avoid O(n²) string copies.
-    // URL capture class excludes < > " ' to block <javascript:...> autolink-style bypass and
-    // prevent url'title' (no space) absorbing the single-quote title delimiter into the URL.
-    // Title group supports three CommonMark §6.6 delimiters: "...", '...', (...).
-    // Capture groups: [1]=text/alt, [2]=url, [3]=dq-title, [4]=sq-title, [5]=paren-title.
-    // Single-quote body: (?:[^'\\]|\\.)*  — escape-aware, allows \' inside.
-    // Paren body: (?:[^()\\]|\\.)*  — blocks unescaped ( and ) so (bad(title) is invalid (AC-10).
-    // \s* before final ) tolerates optional trailing spaces (EDGE-2).
-    private const PATTERN_IMAGE    = '/\G!\[([^\]]*)\]\(([^)<>"\'\\s]+)(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
-    private const PATTERN_LINK     = '/\G\[([^\]]+)\]\(([^)<>"\'\\s]+)(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
-    // Angle-bracket URL variants: [text](<url with spaces>) and ![alt](<src>).
-    // URL group allows spaces and most chars; blocks literal < > and newlines; \\ . handles escapes.
-    // Title group: same three-delimiter form as plain patterns (groups 3/4/5).
-    // \s* before final ) tolerates optional trailing spaces (EDGE-2).
-    private const PATTERN_IMAGE_ANGLE = '/\G!\[([^\]]*)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
-    private const PATTERN_LINK_ANGLE  = '/\G\[([^\]]+)\]\(<((?:[^<>\n\\\\]|\\\\.)*)>(?:\s+(?:"([^"]*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?\s*\)/';
-    private const PATTERN_REF_LINK  = '/\G\[([^\]]+)\]\[([^\]]*)\]/';
-    private const PATTERN_REF_IMAGE = '/\G!\[([^\]]*)\]\[([^\]]*)\]/';
     // CommonMark §6.9 — autolinks: <scheme:path> and <email>.
     // Scheme: letter followed by 1–31 chars of [letter digit + - .], then colon.
     // Path: any char except NUL, space, <, >.
@@ -141,6 +133,10 @@ final class InlineParser
         $len = strlen($text);
         $pos = 0;
         $buffer = '';
+        /** @var list<array{idx: int, image: bool, start: int}> $brackets */
+        $brackets = [];
+        // Openers below this stack index are inactive: no links inside links (§6.3).
+        $inactiveBelow = 0;
 
         while ($pos < $len) {
             $char = $text[$pos];
@@ -264,87 +260,18 @@ final class InlineParser
                 continue;
             }
 
-            // ── Image: ![alt](src "title"?) ───────────────────────────────────
+            // ── Link / image openers: '[' and '![' (CommonMark §6.3, "look for link or image").
+            // Openers are pushed as placeholder TextNodes; a later ']' turns the tokens after
+            // a matching opener into a LinkNode/ImageNode, so link text is parsed only once
+            // and nested brackets, code spans and autolinks take their natural precedence.
             if ($char === '!' && ($pos + 1) < $len && $text[$pos + 1] === '[') {
-                // Angle-bracket URL form: ![alt](<src> or <src "title">) — checked first.
-                if (preg_match(self::PATTERN_IMAGE_ANGLE, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    $src = stripslashes($m[2]);
-                    if ($this->isSafeAngleBracketUrl($src)) {
-                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
-                        $tokens[] = new ImageNode(
-                            src: $src,
-                            alt: $m[1],
-                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
-                        );
-                    } else {
-                        $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
-                if (preg_match(self::PATTERN_IMAGE, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    if ($this->isSafeUrl($m[2])) {
-                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
-                        $tokens[] = new ImageNode(
-                            src: $m[2],
-                            alt: $m[1],
-                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
-                        );
-                    } else {
-                        $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
-                // Image reference: ![alt][ref] or collapsed ![alt][]
-                if ($this->refs !== [] && preg_match(self::PATTERN_REF_IMAGE, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
-                    if (isset($this->refs[$lookupKey])) {
-                        $def = $this->refs[$lookupKey];
-                        if ($this->isSafeUrl($def['href'])) {
-                            $tokens[] = new ImageNode(
-                                src: $def['href'],
-                                alt: $m[1],
-                                title: $def['title'],
-                            );
-                        } else {
-                            $buffer .= $m[0]; // Unsafe src: render as literal text (XSS prevention)
-                        }
-                    } else {
-                        $buffer .= $m[0]; // Unresolved reference → literal text
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
-                // Image shortcut reference: ![alt] (no second bracket pair)
-                if ($this->refs !== [] && ($closePos = strpos($text, ']', $pos + 2)) !== false) {
-                    $alt = substr($text, $pos + 2, $closePos - $pos - 2);
-                    $nextChar = $text[$closePos + 1] ?? '';
-                    if ($nextChar !== '(' && $nextChar !== '[' && $alt !== '') {
-                        $lookupKey = mb_strtolower($alt, 'UTF-8');
-                        if (isset($this->refs[$lookupKey])) {
-                            $def = $this->refs[$lookupKey];
-                            $this->flushBuffer($buffer, $tokens);
-                            if ($this->isSafeUrl($def['href'])) {
-                                $tokens[] = new ImageNode(
-                                    src: $def['href'],
-                                    alt: $alt,
-                                    title: $def['title'],
-                                );
-                            } else {
-                                $buffer .= substr($text, $pos, $closePos - $pos + 1); // Unsafe src → literal
-                            }
-                            $pos = $closePos + 1;
-                            continue;
-                        }
-                    }
-                }
+                $this->flushBuffer($buffer, $tokens);
+                $tokens[]   = self::bracketPlaceholder('![');
+                $brackets[] = ['idx' => count($tokens) - 1, 'image' => true, 'start' => $pos + 2];
+                $pos += 2;
+                continue;
             }
 
-            // ── Link: [text](url "title"?) and reference links ───────────────
             if ($char === '[') {
                 // ── Footnote reference: [^label] ─────────────────────────────────
                 // Gate on $text[$pos+1] === '^' to avoid regex overhead on every [.
@@ -376,88 +303,16 @@ final class InlineParser
                     // No match or undefined — fall through.
                 }
 
-                // 1a. Angle-bracket URL form: [text](<url> or <url "title">) — checked first.
-                if (preg_match(self::PATTERN_LINK_ANGLE, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    $href = stripslashes($m[2]);
-                    if ($this->isSafeAngleBracketUrl($href)) {
-                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
-                        $tokens[] = new LinkNode(
-                            href: $href,
-                            children: $this->scan($m[1], $depth + 1),
-                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
-                        );
-                    } else {
-                        $buffer .= $m[0]; // Unsafe URL: render as literal text (XSS prevention)
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
+                $this->flushBuffer($buffer, $tokens);
+                $tokens[]   = self::bracketPlaceholder('[');
+                $brackets[] = ['idx' => count($tokens) - 1, 'image' => false, 'start' => $pos + 1];
+                $pos++;
+                continue;
+            }
 
-                // 1b. Inline link — highest priority (CommonMark spec §6.3)
-                if (preg_match(self::PATTERN_LINK, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    $href = $m[2];
-                    if ($this->isSafeUrl($href)) {
-                        $rawTitle = ($m[3] ?? '') !== '' ? $m[3] : (($m[4] ?? '') !== '' ? $m[4] : (($m[5] ?? '') !== '' ? $m[5] : null));
-                        $tokens[] = new LinkNode(
-                            href: $href,
-                            children: $this->scan($m[1], $depth + 1),
-                            title: $rawTitle !== null ? stripslashes($rawTitle) : null,
-                        );
-                    } else {
-                        $buffer .= $m[0]; // Unsafe URL: render as literal text (XSS prevention)
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
-
-                // 2. Reference link: [text][ref] or collapsed [text][]
-                if (preg_match(self::PATTERN_REF_LINK, $text, $m, 0, $pos)) {
-                    $this->flushBuffer($buffer, $tokens);
-                    $lookupKey = mb_strtolower($m[2] !== '' ? $m[2] : $m[1], 'UTF-8');
-                    if (isset($this->refs[$lookupKey])) {
-                        $def = $this->refs[$lookupKey];
-                        if ($this->isSafeUrl($def['href'])) {
-                            $tokens[] = new LinkNode(
-                                href: $def['href'],
-                                children: $this->scan($m[1], $depth + 1),
-                                title: $def['title'],
-                            );
-                        } else {
-                            $buffer .= $m[0]; // Unsafe href: render as literal text (XSS prevention)
-                        }
-                    } else {
-                        $buffer .= $m[0]; // Unresolved reference → literal text
-                    }
-                    $pos += strlen($m[0]);
-                    continue;
-                }
-
-                // 3. Shortcut reference: [text] — guard against O(n²) strpos on ref-free documents
-                if ($this->refs !== [] && ($closePos = strpos($text, ']', $pos + 1)) !== false) {
-                    $label = substr($text, $pos + 1, $closePos - $pos - 1);
-                    $nextChar = $text[$closePos + 1] ?? '';
-                    // Shortcut: next char must NOT be ( or [ (those were handled above)
-                    if ($nextChar !== '(' && $nextChar !== '[' && $label !== '') {
-                        $lookupKey = mb_strtolower($label, 'UTF-8');
-                        if (isset($this->refs[$lookupKey])) {
-                            $def = $this->refs[$lookupKey];
-                            $this->flushBuffer($buffer, $tokens);
-                            if ($this->isSafeUrl($def['href'])) {
-                                $tokens[] = new LinkNode(
-                                    href: $def['href'],
-                                    children: $this->scan($label, $depth + 1),
-                                    title: $def['title'],
-                                );
-                            } else {
-                                $buffer .= substr($text, $pos, $closePos - $pos + 1); // Unsafe href → literal
-                            }
-                            $pos = $closePos + 1;
-                            continue;
-                        }
-                    }
-                }
+            if ($char === ']' && $brackets !== []) {
+                $pos = $this->closeBracket($text, $pos, $buffer, $tokens, $brackets, $inactiveBelow);
+                continue;
             }
 
             // ── Strikethrough: ~~text~~ ──────────────────────────────────────
@@ -495,6 +350,13 @@ final class InlineParser
             if ($char === '<') {
                 // 1. URL autolink — MUST run before PATTERN_RAW_HTML_INLINE (see constant comment).
                 if (preg_match(self::PATTERN_AUTOLINK_URL, $text, $m, 0, $pos)) {
+                    $scheme = strtolower(substr($m[1], 0, (int) strpos($m[1], ':')));
+                    if (in_array($scheme, self::SCRIPT_SCHEMES, true)) {
+                        // <javascript:…>, <data:…>, <vbscript:…>: literal text (XSS prevention).
+                        $buffer .= $m[0];
+                        $pos    += strlen($m[0]);
+                        continue;
+                    }
                     $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new AutolinkNode($m[1], false);
                     $pos += strlen($m[0]);
@@ -575,45 +437,350 @@ final class InlineParser
         }
     }
 
-    private function isSafeUrl(string $url): bool
+    /**
+     * A '[' or '![' opener in the token list. It is an inert delimiter run (it can neither
+     * open nor close emphasis), so when no link forms DelimiterStack turns it back into
+     * literal text merged with its neighbours.
+     */
+    private static function bracketPlaceholder(string $literal): DelimiterRun
     {
-        // Reject control chars (raw or percent-encoded: %00, %0a, %0d…).
-        if (preg_match('/[\x00-\x20\x7F]/', rawurldecode($url))) {
+        return new DelimiterRun($literal, 1, false, false);
+    }
+
+    /**
+     * Handle ']' when an opener is on the bracket stack (CommonMark §6.3).
+     *
+     * @param list<DelimiterRun|InlineNodeInterface>      $tokens
+     * @param list<array{idx: int, image: bool, start: int}> $brackets
+     * @return int new cursor position
+     */
+    private function closeBracket(
+        string $text,
+        int    $pos,
+        string &$buffer,
+        array  &$tokens,
+        array  &$brackets,
+        int    &$inactiveBelow,
+    ): int {
+        $opener = array_pop($brackets);
+        // After a link forms, earlier '[' openers are inactive; '![' openers stay active.
+        $active = $opener['image'] || count($brackets) >= $inactiveBelow;
+        $inactiveBelow = min($inactiveBelow, count($brackets));
+
+        $match = $active
+            ? $this->matchLinkTail($text, $pos + 1, substr($text, $opener['start'], $pos - $opener['start']))
+            : null;
+        if ($match === null || !$this->isSafeLinkUrl($match['href'])) {
+            // Not a link (or an unsafe URL — XSS prevention): ']' is literal text and the
+            // opener placeholder stays as a literal '[' / '!['.
+            $buffer .= ']';
+            return $pos + 1;
+        }
+
+        $this->flushBuffer($buffer, $tokens);
+        $children = (new DelimiterStack())->resolve(array_slice($tokens, $opener['idx'] + 1));
+        // Drop the opener and the link text from the tail. array_pop is O(removed);
+        // array_splice would rebuild the whole token list on every link.
+        while (count($tokens) > $opener['idx']) {
+            array_pop($tokens);
+        }
+
+        if ($opener['image']) {
+            $tokens[] = new ImageNode(src: $match['href'], alt: $this->plainText($children), title: $match['title']);
+        } else {
+            // Footnote references are links themselves: move them after the link rather
+            // than nesting <a> inside <a>.
+            $footnotes = array_values(array_filter($children, static fn($n) => $n instanceof FootnoteRefNode));
+            $children  = array_values(array_filter($children, static fn($n) => !$n instanceof FootnoteRefNode));
+            $tokens[]  = new LinkNode(href: $match['href'], children: $children, title: $match['title']);
+            array_push($tokens, ...$footnotes);
+            // No links inside links: every '[' opener still on the stack becomes inactive.
+            $inactiveBelow = count($brackets);
+        }
+
+        return $match['end'];
+    }
+
+    /**
+     * Try, at $pos (just after ']'), an inline destination "(…)", then a full
+     * "[label]", collapsed "[]" or shortcut reference.
+     *
+     * @return array{href: string, title: ?string, end: int}|null
+     */
+    private function matchLinkTail(string $text, int $pos, string $openerLabel): ?array
+    {
+        if (($text[$pos] ?? '') === '(') {
+            $inline = $this->parseInlineDestination($text, $pos + 1);
+            if ($inline !== null) {
+                return $inline;
+            }
+        }
+
+        if ($this->refs === []) {
+            return null;
+        }
+
+        $end = $pos;
+        if (($text[$pos] ?? '') === '[') {
+            $label = $this->scanLinkLabel($text, $pos);
+            if ($label !== null && trim($label[0], " \t\n") !== '') {
+                // Full reference: only the explicit label is looked up.
+                return $this->lookupReference($label[0], $label[1]);
+            }
+            if ($label !== null && $label[0] === '') {
+                $end = $label[1]; // collapsed "[]"
+            }
+        }
+
+        if (!$this->isValidLinkLabel($openerLabel)) {
+            return null;
+        }
+        return $this->lookupReference($openerLabel, $end);
+    }
+
+    /** @return array{href: string, title: ?string, end: int}|null */
+    private function lookupReference(string $label, int $end): ?array
+    {
+        $def = $this->refs[self::normalizeLabel($label)] ?? null;
+        if ($def === null) {
+            return null;
+        }
+        return [
+            'href'  => $this->decodeLinkText($def['href']),
+            'title' => $def['title'] !== null ? $this->decodeLinkText($def['title']) : null,
+            'end'   => $end,
+        ];
+    }
+
+    /**
+     * Parse "destination title?)" after the '(' of an inline link (§6.3).
+     *
+     * @return array{href: string, title: ?string, end: int}|null
+     */
+    private function parseInlineDestination(string $text, int $pos): ?array
+    {
+        $len = strlen($text);
+        $pos = $this->skipLinkWhitespace($text, $pos);
+        if ($pos === null) {
+            return null;
+        }
+        if (($text[$pos] ?? '') === ')') {
+            return ['href' => '', 'title' => null, 'end' => $pos + 1];
+        }
+
+        if (($text[$pos] ?? '') === '<') {
+            // <…>: no line endings, no unescaped '<' or '>'.
+            $start = $pos + 1;
+            for ($i = $start; $i < $len; $i++) {
+                $c = $text[$i];
+                if ($c === '\\' && $i + 1 < $len) {
+                    $i++;
+                    continue;
+                }
+                if ($c === '>') {
+                    break;
+                }
+                if ($c === '<' || $c === "\n") {
+                    return null;
+                }
+            }
+            if ($i >= $len) {
+                return null;
+            }
+            $dest = substr($text, $start, $i - $start);
+            $pos  = $i + 1;
+        } else {
+            // Raw destination: no spaces or controls, balanced (unescaped) parentheses.
+            $start = $pos;
+            $depth = 0;
+            for ($i = $pos; $i < $len; $i++) {
+                $c = $text[$i];
+                if ($c === '\\' && $i + 1 < $len && str_contains(self::ESCAPABLE_CHARS, $text[$i + 1])) {
+                    $i++;
+                    continue;
+                }
+                if ($c === '(') {
+                    if (++$depth > 32) {
+                        return null;
+                    }
+                } elseif ($c === ')') {
+                    if ($depth === 0) {
+                        break;
+                    }
+                    $depth--;
+                } elseif (ord($c) <= 0x20 || ord($c) === 0x7F) {
+                    break;
+                }
+            }
+            if ($depth !== 0 || $i === $start) {
+                return null;
+            }
+            $dest = substr($text, $start, $i - $start);
+            $pos  = $i;
+        }
+
+        $title  = null;
+        $afterWs = $this->skipLinkWhitespace($text, $pos);
+        if ($afterWs === null) {
+            return null;
+        }
+        $opener = $text[$afterWs] ?? '';
+        if ($afterWs > $pos && ($opener === '"' || $opener === "'" || $opener === '(')) {
+            $closer = $opener === '(' ? ')' : $opener;
+            for ($i = $afterWs + 1; $i < $len; $i++) {
+                $c = $text[$i];
+                if ($c === '\\' && $i + 1 < $len) {
+                    $i++;
+                    continue;
+                }
+                if ($c === $closer) {
+                    break;
+                }
+                if ($opener === '(' && $c === '(') {
+                    return null;
+                }
+            }
+            if ($i >= $len) {
+                return null;
+            }
+            $rawTitle = substr($text, $afterWs + 1, $i - $afterWs - 1);
+            if (preg_match('/\n[ \t]*\n/', $rawTitle)) {
+                return null; // a title cannot contain a blank line
+            }
+            $title   = $this->decodeLinkText($rawTitle);
+            $afterWs = $this->skipLinkWhitespace($text, $i + 1);
+            if ($afterWs === null) {
+                return null;
+            }
+        }
+
+        if (($text[$afterWs] ?? '') !== ')') {
+            return null;
+        }
+        return ['href' => $this->decodeLinkText($dest), 'title' => $title, 'end' => $afterWs + 1];
+    }
+
+    /** Skip spaces/tabs and at most one line ending; null if a blank line is crossed. */
+    private function skipLinkWhitespace(string $text, int $pos): ?int
+    {
+        $len      = strlen($text);
+        $newlines = 0;
+        while ($pos < $len && ($text[$pos] === ' ' || $text[$pos] === "\t" || $text[$pos] === "\n")) {
+            if ($text[$pos] === "\n" && ++$newlines > 1) {
+                return null;
+            }
+            $pos++;
+        }
+        return $pos;
+    }
+
+    /**
+     * Scan a link label "[…]" starting at $pos: at most 999 chars, no unescaped brackets.
+     *
+     * @return array{string, int}|null [label content, position after ']']
+     */
+    private function scanLinkLabel(string $text, int $pos): ?array
+    {
+        $len = strlen($text);
+        for ($i = $pos + 1; $i < $len && $i - $pos <= 1000; $i++) {
+            $c = $text[$i];
+            if ($c === '\\' && $i + 1 < $len) {
+                $i++;
+                continue;
+            }
+            if ($c === '[') {
+                return null;
+            }
+            if ($c === ']') {
+                return [substr($text, $pos + 1, $i - $pos - 1), $i + 1];
+            }
+        }
+        return null;
+    }
+
+    private function isValidLinkLabel(string $label): bool
+    {
+        return strlen($label) <= 999
+            && trim($label, " \t\n") !== ''
+            && $this->scanLinkLabel('[' . $label . ']', 0) !== null;
+    }
+
+    /**
+     * Link label matching key (CommonMark §4.7): Unicode case fold, inner whitespace
+     * collapsed to one space, outer whitespace trimmed. Shared with Parser so that
+     * definitions and references normalise identically.
+     */
+    public static function normalizeLabel(string $label): string
+    {
+        $collapsed = (string) preg_replace('/[ \t\n\r]+/', ' ', trim($label, " \t\n\r"));
+        return mb_convert_case($collapsed, MB_CASE_FOLD, 'UTF-8');
+    }
+
+    /** Resolve backslash escapes and entity references in a destination or title. */
+    private function decodeLinkText(string $raw): string
+    {
+        return (string) preg_replace_callback(
+            '/\\\\([!-\/:-@\[-`{-~])|&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/',
+            static function (array $m): string {
+                if (isset($m[1])) { // backslash escape (group absent for an entity match)
+                    return $m[1];
+                }
+                if ($m[0] === '&#0;' || preg_match('/^&#[xX]?0+;$/', $m[0])) {
+                    return "\u{FFFD}";
+                }
+                return html_entity_decode($m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            },
+            $raw,
+        );
+    }
+
+    /**
+     * Plain-text rendering of inline nodes, used for image alt text (§6.4).
+     *
+     * @param InlineNodeInterface[] $nodes
+     */
+    private function plainText(array $nodes): string
+    {
+        $out = '';
+        foreach ($nodes as $node) {
+            $out .= match (true) {
+                $node instanceof TextNode          => $node->text,
+                $node instanceof CodeNode          => $node->code,
+                $node instanceof HtmlEntityNode    => html_entity_decode($node->entity, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                $node instanceof ImageNode         => $node->alt,
+                $node instanceof AutolinkNode      => $node->url,
+                $node instanceof RawHtmlInlineNode => $node->content,
+                $node instanceof LinkNode,
+                $node instanceof EmphasisNode,
+                $node instanceof StrongNode,
+                $node instanceof StrikethroughNode => $this->plainText($node->children),
+                $node instanceof SoftBreakNode,
+                $node instanceof HardBreakNode     => "\n",
+                default                            => '',
+            };
+        }
+        return $out;
+    }
+
+    /**
+     * Safety check for link/image URLs (after escapes and entities are decoded).
+     *
+     * Spaces are allowed (angle-bracket destinations, entities). C0 controls and DEL are
+     * rejected, raw or percent-encoded — browsers strip CR/LF/TAB from URLs, which would
+     * otherwise allow a "java\nscript:" bypass. Leading/trailing spaces are trimmed before
+     * the scheme check, as browsers do.
+     */
+    private function isSafeLinkUrl(string $url): bool
+    {
+        if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
             return false;
         }
+        $url = trim($url, ' ');
         // Reject protocol-relative URLs (//evil.com inherits the host page's scheme).
         if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
             return false;
         }
-        // parse_url() returning false means malformed URL — reject rather than allow.
-        $parts = parse_url($url);
-        if ($parts === false) {
-            return false;
-        }
-        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
-        return in_array($scheme, self::SAFE_SCHEMES, true);
-    }
-
-    /**
-     * Safety check for angle-bracket-delimited URLs.
-     *
-     * Spaces are intentionally allowed (that is the point of angle-bracket URLs).
-     * All other C0/C1 control characters are rejected — browsers strip CR and TAB
-     * from href values, which would allow javascript: scheme bypass if permitted.
-     */
-    private function isSafeAngleBracketUrl(string $url): bool
-    {
-        // Reject control chars except space (0x20). rawurldecode first to catch %0d/%09 etc.
-        if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
-            return false;
-        }
-        // Reject protocol-relative URLs.
-        if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
-            return false;
-        }
-        // For scheme extraction, encode spaces so parse_url() doesn't choke.
-        $urlForParse = str_replace(' ', '%20', $url);
-        $parts = parse_url($urlForParse);
+        $parts = parse_url(str_replace(' ', '%20', $url));
         if ($parts === false) {
             return false;
         }

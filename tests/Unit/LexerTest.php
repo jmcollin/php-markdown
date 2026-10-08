@@ -479,34 +479,53 @@ final class LexerTest extends TestCase
 
     public function testTwoColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b |');
+        $tokens = $this->lexer->tokenize("| a | b |\n|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testThreeColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b | c |');
+        $tokens = $this->lexer->tokenize("| a | b | c |\n|---|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testFourColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b | c | d |');
+        $tokens = $this->lexer->tokenize("| a | b | c | d |\n|---|---|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testTableRowWithoutLeadingPipe(): void
     {
-        $tokens = $this->lexer->tokenize('a | b | c');
+        $tokens = $this->lexer->tokenize("a | b | c\n--- | --- | ---");
+
+        $this->assertCount(2, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
+    }
+
+    public function testPipeLineWithoutDelimiterRowIsParagraph(): void
+    {
+        $tokens = $this->lexer->tokenize('I like cats | dogs | birds');
 
         $this->assertCount(1, $tokens);
-        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
+    }
+
+    public function testDelimiterRowWithDifferentCellCountIsNotATable(): void
+    {
+        $tokens = $this->lexer->tokenize("| a | b |\n|---|");
+
+        $this->assertNotContains(TokenType::TABLE_ROW, array_map(static fn($t) => $t->type, $tokens));
     }
 
     // ── Setext headings ──────────────────────────────────────────────────────

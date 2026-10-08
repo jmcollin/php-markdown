@@ -12,9 +12,10 @@ namespace PhpMarkdown\Lexer;
  */
 final class Lexer
 {
-    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.*)$/';
+    /** ATX heading (CommonMark §4.2): 0–3 spaces, 1–6 '#', then whitespace or end of line. */
+    private const PATTERN_HEADING           = '/^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
-    private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
+    private const PATTERN_BLOCKQUOTE       = '/^ {0,3}((?:>[ \t]*)++)(.*)/';
     /** Bullet list item: [1]=indent, [2]=marker, [3]=spaces after marker, [4]=content. */
     private const PATTERN_UNORDERED_LIST   = '/^( *)([-*+])([ \t]+)(\S.*)/';
     /** Ordered list item (CommonMark §5.2: 1–9 digits, '.' or ')'): [1]=indent, [2]=number, [3]=delimiter, [4]=spaces, [5]=content. */
@@ -23,8 +24,6 @@ final class Lexer
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
     private const PATTERN_STANDALONE_TITLE = '/^(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\))\s*$/';
-    private const PATTERN_TABLE_ROW        = '/^\|?[^|]+(?:\|[^|]+)+\|?$/';
-    private const PATTERN_TABLE_SEPARATOR  = '/^\|?[ \t:|-]+(?:\|[ \t:|-]+)+\|?$/';
     private const PATTERN_SETEXT_H1        = '/^=+\s*$/';
     private const PATTERN_SETEXT_H2        = '/^-+\s*$/';
     private const PATTERN_COLUMNS_OPEN     = '/^:::\s*columns\s*$/i';
@@ -101,6 +100,11 @@ final class Lexer
         $indentedLines   = [];
         $pendingBlanks   = [];
 
+        // Blockquote lazy continuation (CommonMark §5.1): whether the last BLOCKQUOTE
+        // token left a paragraph open, and whether a fence is open inside the quote.
+        $bqParagraphOpen = false;
+        $bqFenceOpen     = false;
+
         // Content columns of the open list items, outermost first (CommonMark §5.2):
         // an item is nested in the last open item whose content column it reaches.
         $listColumns   = [];
@@ -112,7 +116,17 @@ final class Lexer
         $footnoteBodyLabel  = '';
         $footnoteBodyLines  = [];
 
-        foreach ($lines as $raw) {
+        // GFM table state: number of columns of the open table (0 = no table).
+        $tableColumns = 0;
+        $skipNextLine = false; // delimiter row already consumed with its header
+
+        foreach ($lines as $lineIdx => $raw) {
+            if ($skipNextLine) {
+                $skipNextLine = false;
+                continue;
+            }
+            $inTable      = $tableColumns;
+            $tableColumns = 0;
             $line     = rtrim($raw, "\r");
             $expanded = $this->expandTabs($line);
 
@@ -348,6 +362,19 @@ final class Lexer
                 // Fall through to process current line normally.
             }
 
+            // Lazy continuation line: a non-'>' line that cannot start a block continues
+            // the paragraph open in the immediately preceding blockquote line.
+            $prevToken = end($tokens);
+            if ($bqParagraphOpen
+                && $pendingLines === []
+                && $prevToken instanceof Token
+                && $prevToken->type === TokenType::BLOCKQUOTE
+                && $this->isParagraphContinuation($line)
+            ) {
+                $tokens[] = new Token(TokenType::BLOCKQUOTE, ltrim($line, " \t"), ['level' => $prevToken->meta['level']]);
+                continue;
+            }
+
             $listOpen = $this->lastNonBlankIsListItem($tokens, $listOpenCache);
 
             // List item continuation: paragraph text right after an item (no blank line in
@@ -381,6 +408,35 @@ final class Lexer
 
             if ($token->type === TokenType::LIST_ITEM) {
                 $token = $this->placeListItem($token, $line, $listOpen, $hadPendingLines, $listColumns);
+            }
+
+            // GFM tables: a header row is only a table when the next line is a delimiter
+            // row with the same number of cells; rows then continue until a blank line
+            // or the start of another block.
+            if ($token->type === TokenType::PARAGRAPH) {
+                if ($inTable > 0) {
+                    $tokens[] = new Token(TokenType::TABLE_ROW, $line);
+                    $tableColumns = $inTable;
+                    continue;
+                }
+                $nextLine = isset($lines[$lineIdx + 1]) ? rtrim($lines[$lineIdx + 1], "\r") : null;
+                if ($nextLine !== null
+                    && TableCells::hasPipe($line)
+                    && !str_starts_with($this->expandTabs($nextLine), '    ')
+                ) {
+                    $aligns = TableCells::alignments($nextLine);
+                    if ($aligns !== null && count($aligns) === count(TableCells::split($line))) {
+                        foreach ($pendingLines as $pt) {
+                            $tokens[] = $pt;
+                        }
+                        $pendingLines   = [];
+                        $tokens[]       = new Token(TokenType::TABLE_ROW, $line);
+                        $tokens[]       = new Token(TokenType::TABLE_SEPARATOR, $nextLine);
+                        $tableColumns   = count($aligns);
+                        $skipNextLine   = true;
+                        continue;
+                    }
+                }
             }
 
             // A LINK_DEFINITION with no title may have its title on the next line (CommonMark §4.7).
@@ -417,6 +473,26 @@ final class Lexer
                 $tokens[] = $pt;
             }
             $pendingLines = [];
+
+            if ($token->type === TokenType::BLOCKQUOTE) {
+                $prevToken = end($tokens);
+                $continuesQuote = $prevToken instanceof Token && $prevToken->type === TokenType::BLOCKQUOTE;
+                if (!$continuesQuote) {
+                    $bqParagraphOpen = false;
+                    $bqFenceOpen     = false;
+                }
+                // A shallower '>' line whose content is paragraph text is a lazy
+                // continuation of the deeper quote's open paragraph (e.g. ">>> a\n> b").
+                if ($continuesQuote
+                    && $bqParagraphOpen
+                    && $token->meta['level'] < $prevToken->meta['level']
+                    && $this->isParagraphContinuation($token->content)
+                ) {
+                    $token = new Token(TokenType::BLOCKQUOTE, $token->content, ['level' => $prevToken->meta['level']]);
+                }
+                [$bqParagraphOpen, $bqFenceOpen] = $this->quoteLineState($token->content, $bqParagraphOpen, $bqFenceOpen);
+            }
+
             $tokens[] = $token;
         }
 
@@ -628,6 +704,11 @@ final class Lexer
         $pos = 0;
         $len = strlen($expandedLine);
         for ($l = 0; $l < $level; $l++) {
+            // Skip indentation before the marker (0-3 spaces before the first one,
+            // any spacing between nested markers, as PATTERN_BLOCKQUOTE allows).
+            while ($pos < $len && $expandedLine[$pos] === ' ') {
+                $pos++;
+            }
             if ($pos < $len && $expandedLine[$pos] === '>') {
                 $pos++;
             }
@@ -637,6 +718,48 @@ final class Lexer
             }
         }
         return substr($expandedLine, $pos);
+    }
+
+    /**
+     * True when $line is non-blank paragraph text that cannot start a block able to
+     * interrupt a paragraph (CommonMark §5.1 "paragraph continuation text").
+     */
+    private function isParagraphContinuation(string $line): bool
+    {
+        if ($line === '' || ctype_space($line)) {
+            return false;
+        }
+        return !preg_match(self::PATTERN_FENCED_OPEN, $line)
+            && !preg_match($this->patternHtmlBlockStart, $line)
+            && !preg_match(self::PATTERN_HORIZONTAL_RULE, $line)
+            && !preg_match(self::PATTERN_HEADING, $line)
+            && !preg_match(self::PATTERN_BLOCKQUOTE, $line)
+            && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
+            && !preg_match(self::PATTERN_ORDERED_LIST, $line)
+            && !preg_match(self::PATTERN_COLUMNS_OPEN, $line);
+    }
+
+    /**
+     * Track, line by line, whether the content of a blockquote leaves a paragraph open
+     * (so the next line may be a lazy continuation) and whether a code fence is open.
+     *
+     * @return array{bool, bool} [paragraphOpen, fenceOpen]
+     */
+    private function quoteLineState(string $content, bool $paragraphOpen, bool $fenceOpen): array
+    {
+        if (preg_match(self::PATTERN_FENCED_OPEN, $content)) {
+            return [false, !$fenceOpen];
+        }
+        if ($fenceOpen) {
+            return [false, true];
+        }
+        // Indented code cannot interrupt a paragraph, but it cannot start one either.
+        if (!$paragraphOpen && str_starts_with($this->expandTabs($content), '    ')) {
+            return [false, false];
+        }
+        $isText = $this->isParagraphContinuation($content)
+            || ($paragraphOpen && $content !== '' && !ctype_space($content) && !preg_match(self::PATTERN_HEADING, $content));
+        return [$isText, false];
     }
 
     private function matchLine(string $line): Token
@@ -650,7 +773,8 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_HEADING, $line, $m)) {
-            $content = (string) preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2]));
+            // Strip the optional closing sequence: '#'s preceded by whitespace (or alone).
+            $content = (string) preg_replace('/(?:^|[ \t]+)#+[ \t]*$/', '', trim($m[2] ?? '', " \t"));
             return new Token(
                 TokenType::HEADING,
                 $content,
@@ -705,15 +829,6 @@ final class Lexer
                     'contentCol' => $this->listContentColumn(strlen($m[1]) + strlen($m[2]) + 1, $m[4]),
                 ],
             );
-        }
-
-        if (str_contains($line, '|')) {
-            if (preg_match(self::PATTERN_TABLE_SEPARATOR, $line)) {
-                return new Token(TokenType::TABLE_SEPARATOR, $line);
-            }
-            if (preg_match(self::PATTERN_TABLE_ROW, $line)) {
-                return new Token(TokenType::TABLE_ROW, $line);
-            }
         }
 
         // Footnote definition: [^label]: body — must run before LINK_DEFINITION

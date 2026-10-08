@@ -6,6 +6,7 @@ namespace PhpMarkdown\Parser;
 
 use PhpMarkdown\Exception\ParseException;
 use PhpMarkdown\Lexer\Lexer;
+use PhpMarkdown\Lexer\TableCells;
 use PhpMarkdown\Lexer\Token;
 use PhpMarkdown\Lexer\TokenType;
 use PhpMarkdown\Node\Block\BlockquoteNode;
@@ -312,69 +313,56 @@ final class Parser
         $headerCells = $this->parseCells($tokens[$i]->content);
         $i++;
 
-        // Separator row — extract alignment, advance
+        // Delimiter row — the Lexer only emits a table when it is present and valid.
         $aligns = [];
         if ($i < $count && $tokens[$i]->type === TokenType::TABLE_SEPARATOR) {
-            $aligns = $this->parseAlignments($tokens[$i]->content);
+            $aligns = TableCells::alignments($tokens[$i]->content) ?? [];
             $i++;
         }
+        $columns = count($headerCells);
 
-        $rows[] = new TableRowNode(
-            cells: array_map(
-                fn(string $cell, int $idx) => new TableCellNode(
-                    children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
-                    align: $aligns[$idx] ?? '',
-                ),
-                $headerCells,
-                array_keys($headerCells),
-            ),
-            isHeader: true,
-        );
+        $rows[] = $this->buildTableRow($headerCells, $aligns, $columns, isHeader: true);
 
         // Body rows
         while ($i < $count && $tokens[$i]->type === TokenType::TABLE_ROW) {
-            $cells = $this->parseCells($tokens[$i]->content);
-            $rows[] = new TableRowNode(
-                cells: array_map(
-                    fn(string $cell, int $idx) => new TableCellNode(
-                        children: $this->inlineParser->parse($cell, $this->linkRefs, $this->footnoteDefs),
-                        align: $aligns[$idx] ?? '',
-                    ),
-                    $cells,
-                    array_keys($cells),
-                ),
-                isHeader: false,
-            );
+            $rows[] = $this->buildTableRow($this->parseCells($tokens[$i]->content), $aligns, $columns, isHeader: false);
             $i++;
         }
 
         return new TableNode(rows: $rows);
     }
 
-    /** @return string[] */
-    private function parseCells(string $line): array
+    /**
+     * GFM: every row has exactly as many cells as the header — missing cells are
+     * empty, excess cells are ignored.
+     *
+     * @param list<string> $cells
+     * @param list<string> $aligns
+     */
+    private function buildTableRow(array $cells, array $aligns, int $columns, bool $isHeader): TableRowNode
     {
-        $line = trim($line, ' |');
-        return array_map(trim(...), explode('|', $line));
+        $nodes = [];
+        for ($idx = 0; $idx < $columns; $idx++) {
+            $nodes[] = new TableCellNode(
+                children: $this->inlineParser->parse($cells[$idx] ?? '', $this->linkRefs, $this->footnoteDefs),
+                align: $aligns[$idx] ?? '',
+            );
+        }
+        return new TableRowNode(cells: $nodes, isHeader: $isHeader);
     }
 
-    /** @return string[] */
-    private function parseAlignments(string $separator): array
+    /**
+     * Split a row on unescaped pipes; an escaped pipe becomes a literal '|' before
+     * inline parsing, including inside code spans (GFM §4.10).
+     *
+     * @return list<string>
+     */
+    private function parseCells(string $line): array
     {
-        $separator = trim($separator, ' |');
-        $aligns = [];
-        foreach (explode('|', $separator) as $col) {
-            $col = trim($col);
-            $left  = str_starts_with($col, ':');
-            $right = str_ends_with($col, ':');
-            $aligns[] = match (true) {
-                $left && $right => 'center',
-                $right          => 'right',
-                $left           => 'left',
-                default         => '',
-            };
-        }
-        return $aligns;
+        return array_map(
+            static fn(string $cell): string => str_replace('\\|', '|', $cell),
+            TableCells::split($line),
+        );
     }
 
     /**
@@ -388,9 +376,9 @@ final class Parser
     {
         $refs = [];
         $filtered = [];
-        foreach ($tokens as $token) {
+        foreach ($this->withContainerDefinitions($tokens) as $token) {
             if ($token->type === TokenType::LINK_DEFINITION) {
-                $key = mb_strtolower($token->meta['label'], 'UTF-8');
+                $key = InlineParser::normalizeLabel($token->meta['label']);
                 // First definition wins (CommonMark spec §4.7)
                 if (!isset($refs[$key])) {
                     $refs[$key] = [
@@ -403,6 +391,60 @@ final class Parser
             }
         }
         return ['refs' => $refs, 'tokens' => $filtered];
+    }
+
+    /**
+     * Return $tokens with, after each blockquote run and columns container, the
+     * LINK_DEFINITION tokens found inside it. Definitions are document-global
+     * (CommonMark §4.7) even when nested in a container, but container content is
+     * only lexed later (per block), so they would otherwise never be registered.
+     * The nested definition tokens are consumed by extractLinkDefinitions().
+     *
+     * @param  Token[] $tokens
+     * @return Token[]
+     */
+    private function withContainerDefinitions(array $tokens, int $depth = 0): array
+    {
+        if ($depth >= 32) {
+            return $tokens;
+        }
+
+        $out   = [];
+        $quote = [];
+        foreach ($tokens as $token) {
+            if ($token->type === TokenType::BLOCKQUOTE) {
+                $out[]   = $token;
+                $quote[] = $token->content;
+                continue;
+            }
+            if ($quote !== []) {
+                array_push($out, ...$this->nestedLinkDefinitions(implode("\n", $quote), $depth));
+                $quote = [];
+            }
+            $out[] = $token;
+            if ($token->type === TokenType::COLUMNS_CONTAINER) {
+                array_push($out, ...$this->nestedLinkDefinitions($token->meta['left_raw'], $depth));
+                array_push($out, ...$this->nestedLinkDefinitions($token->meta['right_raw'], $depth));
+            }
+        }
+        if ($quote !== []) {
+            array_push($out, ...$this->nestedLinkDefinitions(implode("\n", $quote), $depth));
+        }
+        return $out;
+    }
+
+    /**
+     * Lex container content and keep only its LINK_DEFINITION tokens (recursively).
+     *
+     * @return Token[]
+     */
+    private function nestedLinkDefinitions(string $markdown, int $depth): array
+    {
+        $tokens = $this->withContainerDefinitions((new Lexer())->tokenize($markdown), $depth + 1);
+        return array_values(array_filter(
+            $tokens,
+            static fn(Token $t): bool => $t->type === TokenType::LINK_DEFINITION,
+        ));
     }
 
     /**
