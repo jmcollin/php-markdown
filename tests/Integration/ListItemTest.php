@@ -54,6 +54,14 @@ final class ListItemTest extends TestCase
                 "- a\n - b",
                 "<ul>\n<li>a</li>\n<li>b</li>\n</ul>\n",
             ],
+            'item with an ordered then a bullet sub-list' => [
+                "- a\n  1. b\n  - c\n- d",
+                "<ul>\n<li>a<ol>\n<li>b</li>\n</ol>\n<ul>\n<li>c</li>\n</ul>\n</li>\n<li>d</li>\n</ul>\n",
+            ],
+            'sub-lists with different bullets stay in the same item' => [
+                "1. a\n   - b\n   + c\n2. d",
+                "<ol>\n<li>a<ul>\n<li>b</li>\n</ul>\n<ul>\n<li>c</li>\n</ul>\n</li>\n<li>d</li>\n</ol>\n",
+            ],
             'heading after an item is not a continuation' => [
                 "- a\n# b",
                 "<ul>\n<li>a</li>\n</ul>\n<h1>b</h1>\n",
