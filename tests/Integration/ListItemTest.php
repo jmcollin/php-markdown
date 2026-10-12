@@ -62,6 +62,18 @@ final class ListItemTest extends TestCase
                 "1. a\n   - b\n   + c\n2. d",
                 "<ol>\n<li>a<ul>\n<li>b</li>\n</ul>\n<ul>\n<li>c</li>\n</ul>\n</li>\n<li>d</li>\n</ol>\n",
             ],
+            'empty bullet item' => [
+                "- foo\n-   \n- bar",
+                "<ul>\n<li>foo</li>\n<li></li>\n<li>bar</li>\n</ul>\n",
+            ],
+            'empty ordered item' => [
+                "1. a\n2.\n3. c",
+                "<ol>\n<li>a</li>\n<li></li>\n<li>c</li>\n</ol>\n",
+            ],
+            'empty item cannot interrupt a paragraph' => [
+                "foo\n*",
+                "<p>foo\n*</p>\n",
+            ],
             'heading after an item is not a continuation' => [
                 "- a\n# b",
                 "<ul>\n<li>a</li>\n</ul>\n<h1>b</h1>\n",
