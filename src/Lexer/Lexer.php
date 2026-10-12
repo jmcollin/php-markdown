@@ -16,10 +16,10 @@ final class Lexer
     private const PATTERN_HEADING           = '/^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
     private const PATTERN_BLOCKQUOTE       = '/^ {0,3}((?:>[ \t]*)++)(.*)/';
-    /** Bullet list item: [1]=indent, [2]=marker, [3]=spaces after marker, [4]=content. */
-    private const PATTERN_UNORDERED_LIST   = '/^( *)([-*+])([ \t]+)(\S.*)/';
-    /** Ordered list item (CommonMark §5.2: 1–9 digits, '.' or ')'): [1]=indent, [2]=number, [3]=delimiter, [4]=spaces, [5]=content. */
-    private const PATTERN_ORDERED_LIST     = '/^( *)(\d{1,9})([.)])([ \t]+)(\S.*)/';
+    /** Bullet list item: [1]=indent, [2]=marker, [3]=spaces after marker, [4]=content (both absent for an empty item). */
+    private const PATTERN_UNORDERED_LIST   = '/^( *)([-*+])(?:([ \t]+)(\S.*)|[ \t]*$)/';
+    /** Ordered list item (CommonMark §5.2: 1–9 digits, '.' or ')'): [1]=indent, [2]=number, [3]=delimiter, [4]=spaces, [5]=content (both absent for an empty item). */
+    private const PATTERN_ORDERED_LIST     = '/^( *)(\d{1,9})([.)])(?:([ \t]+)(\S.*)|[ \t]*$)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^[ \t]{0,3}([-*_])([ \t]*\1){2,}[ \t]*$/';
     private const PATTERN_LINK_DEFINITION  = '/^\[([^\]\[]+)\]:\s+(?:<((?:[^<>\\\\\n]|\\\\.)*)>|(\S+))(?:\s+(?:"((?:[^"\\\\]|\\\\.)*)"|\'((?:[^\'\\\\]|\\\\.)*)\'|\(((?:[^()\\\\]|\\\\.)*)\)))?$/';
     /** Matches a standalone title line (CommonMark §4.7 multiline link ref definition). */
@@ -559,12 +559,13 @@ final class Lexer
 
     /**
      * Column where an item's content starts: after the marker and 1–4 spaces
-     * (5+ spaces count as one: the rest is indented code, §5.2 rule 2).
+     * (5+ spaces count as one: the rest is indented code, §5.2 rule 2; an empty
+     * item's content starts one column after the marker, rule 3).
      */
     private function listContentColumn(int $markerEnd, string $spacing): int
     {
         $width = strlen($this->expandTabs($spacing, $markerEnd));
-        return $markerEnd + ($width >= 5 ? 1 : $width);
+        return $markerEnd + (($width === 0 || $width >= 5) ? 1 : $width);
     }
 
     /**
@@ -581,7 +582,10 @@ final class Lexer
     {
         if (!$listOpen) {
             $listColumns = [];
-            if ($token->meta['indent'] >= 4 || ($inParagraph && $token->meta['ordered'] && $token->meta['start'] !== 1)) {
+            if ($token->meta['indent'] >= 4
+                || ($inParagraph && $token->meta['ordered'] && $token->meta['start'] !== 1)
+                || ($inParagraph && $token->content === '')
+            ) {
                 return new Token(TokenType::PARAGRAPH, $line);
             }
         }
@@ -784,7 +788,7 @@ final class Lexer
 
         // 'depth' is a placeholder: tokenize() computes it from the open items' columns.
         if (preg_match(self::PATTERN_UNORDERED_LIST, $line, $m)) {
-            [$content, $checked] = $this->extractTaskChecked(trim($m[4]));
+            [$content, $checked] = $this->extractTaskChecked(trim($m[4] ?? ''));
             return new Token(
                 TokenType::LIST_ITEM,
                 $content,
@@ -795,13 +799,13 @@ final class Lexer
                     'marker'    => $m[2],
                     'start'     => null,
                     'indent'    => strlen($m[1]),
-                    'contentCol' => $this->listContentColumn(strlen($m[1]) + 1, $m[3]),
+                    'contentCol' => $this->listContentColumn(strlen($m[1]) + 1, $m[3] ?? ''),
                 ],
             );
         }
 
         if (preg_match(self::PATTERN_ORDERED_LIST, $line, $m)) {
-            [$content, $checked] = $this->extractTaskChecked(trim($m[5]));
+            [$content, $checked] = $this->extractTaskChecked(trim($m[5] ?? ''));
             return new Token(
                 TokenType::LIST_ITEM,
                 $content,
@@ -812,7 +816,7 @@ final class Lexer
                     'marker'    => $m[3],
                     'start'     => (int) $m[2],
                     'indent'    => strlen($m[1]),
-                    'contentCol' => $this->listContentColumn(strlen($m[1]) + strlen($m[2]) + 1, $m[4]),
+                    'contentCol' => $this->listContentColumn(strlen($m[1]) + strlen($m[2]) + 1, $m[4] ?? ''),
                 ],
             );
         }
