@@ -267,7 +267,7 @@ final class RendererTest extends TestCase
     public function testMermaidBlockRenderedAsDiv(): void
     {
         $out = $this->render([new FencedCodeNode('graph TD;', 'mermaid')]);
-        $this->assertSame('<div class="mermaid">graph TD;</div>', $out);
+        $this->assertSame("<div class=\"mermaid\">graph TD;</div>\n", $out);
     }
 
     public function testMermaidXssPayloadEscaped(): void
@@ -281,13 +281,13 @@ final class RendererTest extends TestCase
     public function testMermaidEmptyContent(): void
     {
         $out = $this->render([new FencedCodeNode('', 'mermaid')]);
-        $this->assertSame('<div class="mermaid"></div>', $out);
+        $this->assertSame("<div class=\"mermaid\"></div>\n", $out);
     }
 
     public function testMermaidMultilineContentPreserved(): void
     {
         $out = $this->render([new FencedCodeNode("graph TD\n  A --> B\n  B --> C", 'mermaid')]);
-        $this->assertSame("<div class=\"mermaid\">graph TD\n  A --&gt; B\n  B --&gt; C</div>", $out);
+        $this->assertSame("<div class=\"mermaid\">graph TD\n  A --&gt; B\n  B --&gt; C</div>\n", $out);
     }
 
     public function testMermaidSpecialCharsEscaped(): void
@@ -303,7 +303,7 @@ final class RendererTest extends TestCase
     public function testMermaidTrailingNewlinePreserved(): void
     {
         $out = $this->render([new FencedCodeNode("graph TD;\n", 'mermaid')]);
-        $this->assertSame("<div class=\"mermaid\">graph TD;\n</div>", $out);
+        $this->assertSame("<div class=\"mermaid\">graph TD;\n</div>\n", $out);
     }
 
     public function testMermaidCaseUppercaseFallsBackToPreCode(): void
@@ -383,7 +383,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Done')], checked: true),
         ])]);
-        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> Done</li>\n</ul>\n", $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" checked=\"\" disabled=\"\" /> Done</li>\n</ul>\n", $out);
     }
 
     public function testUncheckedListItemRendersCheckbox(): void
@@ -391,7 +391,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([new TextNode('Todo')], checked: false),
         ])]);
-        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled> Todo</li>\n</ul>\n", $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled=\"\" /> Todo</li>\n</ul>\n", $out);
     }
 
     public function testPlainListItemNoCheckbox(): void
@@ -409,7 +409,7 @@ final class RendererTest extends TestCase
         $out = $this->render([new ListNode(ordered: false, children: [
             new ListItemNode([], checked: true),
         ])]);
-        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> </li>\n</ul>\n", $out);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" checked=\"\" disabled=\"\" /> </li>\n</ul>\n", $out);
     }
 
     // ── HardBreakNode rendering ──────────────────────────────────────────────

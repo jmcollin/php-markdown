@@ -53,9 +53,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">First footnote. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">First footnote. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -69,10 +69,10 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Alpha<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> and Beta<sup><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Definition B. <a href="#fnref-1">↩</a></li>'
-            . '<li id="fn-2">Definition A. <a href="#fnref-2">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Definition B. <a href="#fnref-1">↩</a></li>' . "\n"
+            . '<li id="fn-2">Definition A. <a href="#fnref-2">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -85,10 +85,10 @@ final class FootnoteTest extends TestCase
         $this->assertSame(
             "<p>First<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . "<p>Second<sup><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup> and again<sup><a href=\"#fn-2\" id=\"fnref-2-2\">2</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Def A. <a href="#fnref-1">↩</a></li>'
-            . '<li id="fn-2">Def B. <a href="#fnref-2">↩</a> <a href="#fnref-2-2">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Def A. <a href="#fnref-1">↩</a></li>' . "\n"
+            . '<li id="fn-2">Def B. <a href="#fnref-2">↩</a> <a href="#fnref-2-2">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -102,9 +102,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>First<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> and second<sup><a href=\"#fn-1\" id=\"fnref-1-2\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Shared note. <a href="#fnref-1">↩</a> <a href="#fnref-1-2">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Shared note. <a href="#fnref-1">↩</a> <a href="#fnref-1-2">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -148,9 +148,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">First line. Second line, same footnote. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">First line. Second line, same footnote. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -164,9 +164,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Note<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1"><strong>Bold</strong> and <em>italic</em>. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1"><strong>Bold</strong> and <em>italic</em>. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -194,9 +194,9 @@ final class FootnoteTest extends TestCase
         $this->assertSame(
             "<p>Paragraph with reference<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
             . "<p>Another paragraph.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Defined first. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Defined first. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -208,9 +208,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Paragraph with ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Defined at top. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Defined at top. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -277,9 +277,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">All digits. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">All digits. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -291,9 +291,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p>Ref<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>.</p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Hyphenated label. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Hyphenated label. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }
@@ -348,9 +348,9 @@ final class FootnoteTest extends TestCase
         $html = $this->renderMarkdown($md);
         $this->assertSame(
             "<p><em>text<sup><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup></em></p>\n"
-            . '<section class="footnotes"><ol>'
-            . '<li id="fn-1">Inline note. <a href="#fnref-1">↩</a></li>'
-            . '</ol></section>',
+            . "<section class=\"footnotes\">\n<ol>\n"
+            . '<li id="fn-1">Inline note. <a href="#fnref-1">↩</a></li>' . "\n"
+            . "</ol>\n</section>\n",
             $html
         );
     }

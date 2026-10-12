@@ -48,7 +48,8 @@ final class ColumnsRendererTest extends TestCase
         $out = $this->renderMarkdown(":::columns\nGauche\n|||\nDroite\n:::");
 
         $this->assertSame(
-            '<div class="grid grid-cols-2 gap-4"><div class="min-w-0"><p>Gauche</p>' . "\n" . '</div><div class="min-w-0"><p>Droite</p>' . "\n" . '</div></div>',
+            "<div class=\"grid grid-cols-2 gap-4\">\n<div class=\"min-w-0\">\n<p>Gauche</p>\n</div>\n"
+                . "<div class=\"min-w-0\">\n<p>Droite</p>\n</div>\n</div>\n",
             $out,
         );
     }
@@ -95,7 +96,7 @@ final class ColumnsRendererTest extends TestCase
     {
         $out = $this->renderMarkdown(":::columns\n|||\nDroite\n:::");
 
-        $this->assertStringContainsString('<div class="min-w-0"></div>', $out);
+        $this->assertStringContainsString("<div class=\"min-w-0\">\n</div>", $out);
         $this->assertStringContainsString('<p>Droite</p>', $out);
     }
 
@@ -105,7 +106,7 @@ final class ColumnsRendererTest extends TestCase
 
         $this->assertStringContainsString('<p>Gauche</p>', $out);
         // Right column div must be present but empty
-        $this->assertSame(1, substr_count($out, '<div class="min-w-0"></div>'));
+        $this->assertSame(1, substr_count($out, "<div class=\"min-w-0\">\n</div>"));
     }
 
     public function testWhitespaceOnlyColumnsAreEmpty(): void
@@ -113,7 +114,7 @@ final class ColumnsRendererTest extends TestCase
         $out = $this->renderMarkdown(":::columns\n   \n|||\n   \n:::");
 
         $this->assertSame(
-            '<div class="grid grid-cols-2 gap-4"><div class="min-w-0"></div><div class="min-w-0"></div></div>',
+            "<div class=\"grid grid-cols-2 gap-4\">\n<div class=\"min-w-0\">\n</div>\n<div class=\"min-w-0\">\n</div>\n</div>\n",
             $out,
         );
     }
@@ -125,7 +126,7 @@ final class ColumnsRendererTest extends TestCase
         $this->assertStringContainsString('class="grid grid-cols-2 gap-4"', $out);
         $this->assertStringContainsString('Tout le contenu', $out);
         // Right column is empty
-        $this->assertStringContainsString('<div class="min-w-0"></div>', $out);
+        $this->assertStringContainsString("<div class=\"min-w-0\">\n</div>", $out);
     }
 
     // -------------------------------------------------------------------------
@@ -219,7 +220,7 @@ final class ColumnsRendererTest extends TestCase
         $out = $this->renderMarkdown(":::columns\nA\n|||\nB\n:::");
 
         $this->assertMatchesRegularExpression(
-            '/<div class="grid grid-cols-2 gap-4"><div class="min-w-0">.*<\/div><div class="min-w-0">.*<\/div><\/div>/s',
+            '/<div class="grid grid-cols-2 gap-4">\n<div class="min-w-0">\n.*<\/div>\n<div class="min-w-0">\n.*<\/div>\n<\/div>\n/s',
             $out,
         );
     }

@@ -142,8 +142,17 @@ $markdown = <<<MD
 MD;
 
 echo $parser->parse($markdown);
-// <table><thead><tr><th align="left">Name</th><th align="right">Score</th></tr></thead>
-// <tbody><tr><td align="left">Alice</td><td align="right">95</td></tr>...
+// <table>
+// <thead>
+// <tr>
+// <th align="left">Name</th>
+// <th align="right">Score</th>
+// </tr>
+// </thead>
+// <tbody>
+// <tr>
+// <td align="left">Alice</td>
+// ...
 ```
 
 ### Raw HTML pass-through
