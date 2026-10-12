@@ -56,7 +56,11 @@ final class HtmlRenderer
         private readonly ?string $linkRel = null,
         private readonly HtmlSanitizer $sanitizer = new HtmlSanitizer(),
     ) {
+        $this->linkAttrs = $this->buildTargetAndRelAttrs();
     }
+
+    /** target/rel attributes shared by every rendered link (computed once). */
+    private readonly string $linkAttrs;
 
     public function render(DocumentNode $document): string
     {
@@ -240,7 +244,7 @@ final class HtmlRenderer
     private function renderLink(LinkNode $node): string
     {
         $titleAttr  = $node->title !== null ? ' title="' . $this->esc($node->title) . '"' : '';
-        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . $this->targetAndRelAttrs() . '>'
+        return '<a href="' . $this->esc($node->href) . '"' . $titleAttr . $this->linkAttrs . '>'
             . $this->renderChildren($node->children)
             . '</a>';
     }
@@ -259,7 +263,7 @@ final class HtmlRenderer
             ? 'mailto:' . $this->esc($node->url)
             : $this->esc($node->url);
         $text  = $this->esc($node->url);
-        $attrs = $node->isEmail ? '' : $this->targetAndRelAttrs();
+        $attrs = $node->isEmail ? '' : $this->linkAttrs;
         return "<a href=\"{$href}\"{$attrs}>{$text}</a>";
     }
 
@@ -268,7 +272,7 @@ final class HtmlRenderer
      * always carries rel="noopener" (reverse tabnabbing), as HtmlSanitizer enforces
      * for raw HTML links.
      */
-    private function targetAndRelAttrs(): string
+    private function buildTargetAndRelAttrs(): string
     {
         $attrs = $this->linkTarget !== null ? ' target="' . $this->esc($this->linkTarget) . '"' : '';
 

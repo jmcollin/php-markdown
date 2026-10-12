@@ -50,6 +50,10 @@ final class TableCells
     /** Whether $line contains at least one unescaped pipe. */
     public static function hasPipe(string $line): bool
     {
+        // Fast path: most paragraph lines contain no pipe at all.
+        if (!str_contains($line, '|')) {
+            return false;
+        }
         return count(self::split('x' . $line . 'x')) > 1;
     }
 

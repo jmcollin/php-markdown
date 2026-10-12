@@ -64,6 +64,19 @@ final class DelimiterStack
      */
     public function resolve(array $tokens): array
     {
+        // Fast path: without delimiter runs there is nothing to match or merge.
+        $plain = [];
+        foreach ($tokens as $token) {
+            if ($token instanceof DelimiterRun) {
+                $plain = null;
+                break;
+            }
+            $plain[] = $token;
+        }
+        if ($plain !== null) {
+            return $plain;
+        }
+
         $this->node = $this->delim = $this->wrap = [];
         $this->prev = $this->next = $this->dPrev = $this->dNext = [];
         $this->inStack = $this->openersBottom = [];
