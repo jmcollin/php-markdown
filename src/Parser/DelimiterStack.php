@@ -27,10 +27,10 @@ final class DelimiterStack
     /** Maximum emphasis/strong nesting depth kept as nodes. */
     private const MAX_NESTING = 64;
 
-    /** @var array<int, InlineNodeInterface> plain inline nodes, by id */
+    /** @var array<int, InlineNodeInterface|DelimiterRun> inline nodes and inert runs, by id */
     private array $node = [];
 
-    /** @var array<int, array{char: string, count: int, orig: int, canOpen: bool, canClose: bool}> */
+    /** @var array<int, DelimiterEntry> */
     private array $delim = [];
 
     /** @var array<int, array{strong: bool, first: int, char: string}> emphasis wrappers, by id */
@@ -64,17 +64,26 @@ final class DelimiterStack
      */
     public function resolve(array $tokens): array
     {
-        // Fast path: without delimiter runs there is nothing to match or merge.
-        $plain = [];
+        // Fast paths: without delimiter runs there is nothing to match or merge; with
+        // only inert runs (literal brackets) there is nothing to match, only text to merge.
+        $plain  = [];
+        $active = false;
         foreach ($tokens as $token) {
             if ($token instanceof DelimiterRun) {
                 $plain = null;
-                break;
+                if ($token->canOpen || $token->canClose) {
+                    $active = true;
+                    break;
+                }
+            } elseif ($plain !== null) {
+                $plain[] = $token;
             }
-            $plain[] = $token;
         }
         if ($plain !== null) {
             return $plain;
+        }
+        if (!$active) {
+            return $this->mergeText($tokens);
         }
 
         $this->node = $this->delim = $this->wrap = [];
@@ -101,14 +110,16 @@ final class DelimiterStack
             $this->prev[$this->tail] = $id;
             $lastId = $id;
 
-            if ($token instanceof DelimiterRun) {
-                $this->delim[$id] = [
-                    'char'     => $token->char,
-                    'count'    => $token->count,
-                    'orig'     => $token->count,
-                    'canOpen'  => $token->canOpen,
-                    'canClose' => $token->canClose,
-                ];
+            // Inert runs (literal '[' placeholders) can never match: keep them out of the
+            // delimiter stack, build() turns them into literal text like any leftover run.
+            if ($token instanceof DelimiterRun && ($token->canOpen || $token->canClose)) {
+                $this->delim[$id] = new DelimiterEntry(
+                    $token->char,
+                    $token->count,
+                    $token->count,
+                    $token->canOpen,
+                    $token->canClose,
+                );
                 $this->dPrev[$id]   = $lastDelim;
                 $this->dNext[$id]   = null;
                 $this->inStack[$id] = true;
@@ -132,23 +143,23 @@ final class DelimiterStack
     {
         while ($closer !== null) {
             $c = $this->delim[$closer];
-            if (!$c['canClose']) {
+            if (!$c->canClose) {
                 $closer = $this->dNext[$closer];
                 continue;
             }
 
-            $key    = $c['char'] . ($c['canOpen'] ? '1' : '0') . ($c['orig'] % 3);
+            $key    = $c->char . ($c->canOpen ? '1' : '0') . ($c->orig % 3);
             $bottom = $this->openersBottom[$key] ?? null;
 
             // Look back for a matching opener, stopping at openers_bottom (exclusive).
             $opener = $this->dPrev[$closer];
             while ($opener !== null && $opener !== $bottom) {
                 $o = $this->delim[$opener];
-                if ($o['char'] === $c['char'] && $o['canOpen']) {
+                if ($o->char === $c->char && $o->canOpen) {
                     // CommonMark rule 9/10 ("multiple of 3"), on original run lengths.
-                    $oddMatch = ($c['canOpen'] || $o['canClose'])
-                        && $c['orig'] % 3 !== 0
-                        && ($o['orig'] + $c['orig']) % 3 === 0;
+                    $oddMatch = ($c->canOpen || $o->canClose)
+                        && $c->orig % 3 !== 0
+                        && ($o->orig + $c->orig) % 3 === 0;
                     if (!$oddMatch) {
                         break;
                     }
@@ -160,7 +171,7 @@ final class DelimiterStack
                 // No opener: nothing at or below the element before this closer can open it.
                 $this->openersBottom[$key] = $this->dPrev[$closer];
                 $nextCloser = $this->dNext[$closer];
-                if (!$c['canOpen']) {
+                if (!$c->canOpen) {
                     $this->removeDelimiter($closer);
                 }
                 $closer = $nextCloser;
@@ -168,9 +179,9 @@ final class DelimiterStack
             }
 
             $o   = $this->delim[$opener];
-            $use = ($o['count'] >= 2 && $c['count'] >= 2) ? 2 : 1;
-            $this->delim[$opener]['count'] -= $use;
-            $this->delim[$closer]['count'] -= $use;
+            $use = ($o->count >= 2 && $c->count >= 2) ? 2 : 1;
+            $this->delim[$opener]->count -= $use;
+            $this->delim[$closer]->count -= $use;
 
             // Delimiters strictly between opener and closer leave the stack (they stay
             // in the token list and are emitted as literal text).
@@ -190,7 +201,7 @@ final class DelimiterStack
             $first = (int) $this->next[$opener];
             $last  = (int) $this->prev[$closer];
             $w     = $this->nextId++;
-            $this->wrap[$w]    = ['strong' => $use === 2, 'first' => $first, 'char' => $c['char']];
+            $this->wrap[$w]    = ['strong' => $use === 2, 'first' => $first, 'char' => $c->char];
             $this->prev[$first] = null;
             $this->next[$last]  = null;
             $this->next[$opener] = $w;
@@ -198,11 +209,11 @@ final class DelimiterStack
             $this->next[$w]      = $closer;
             $this->prev[$closer] = $w;
 
-            if ($this->delim[$opener]['count'] === 0) {
+            if ($this->delim[$opener]->count === 0) {
                 $this->unlink($opener);
                 $this->removeDelimiter($opener);
             }
-            if ($this->delim[$closer]['count'] === 0) {
+            if ($this->delim[$closer]->count === 0) {
                 $nextCloser = $this->dNext[$closer];
                 $this->unlink($closer);
                 $this->removeDelimiter($closer);
@@ -319,7 +330,7 @@ final class DelimiterStack
     private function literalRun(int $id): DelimiterRun
     {
         $d = $this->delim[$id];
-        return new DelimiterRun($d['char'], $d['count'], $d['canOpen'], $d['canClose']);
+        return new DelimiterRun($d->char, $d->count, $d->canOpen, $d->canClose);
     }
 
     /**

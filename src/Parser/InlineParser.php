@@ -43,22 +43,38 @@ final class InlineParser
      */
     private const ESCAPABLE_CHARS = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
 
+    /** Bytes that may start an inline construct in scan(); every other byte is plain text. */
+    private const SPECIAL_CHARS = "\\`&![]~*_<";
+
+    /** Bytes a raw link destination scan must stop on: '\\', parentheses, space and controls. */
+    private const RAW_DESTINATION_STOP = "\\()\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F\x20\x7F";
+
+    // Inline patterns are matched at a given offset with the A (anchored) modifier and
+    // (*NO_START_OPT). Without the latter PCRE first checks that a required character
+    // ('>', '@', ';', ']') exists somewhere after the offset: a scan of the rest of the
+    // text on every call, which made input like "< a < a …" quadratic.
     // CommonMark §6.9 — autolinks: <scheme:path> and <email>.
     // Scheme: letter followed by 1–31 chars of [letter digit + - .], then colon.
     // Path: any char except NUL, space, <, >.
     // SAFETY: These checks MUST run before PATTERN_RAW_HTML_INLINE in scan() — the raw-HTML
     // alternative [a-zA-Z][^>]*> would swallow <http://example.com> as an opening tag.
     private const PATTERN_AUTOLINK_URL =
-        '/\G<([a-zA-Z][a-zA-Z0-9+\-.]{1,31}:[^\x00-\x20<>]*)>/';
+        '/(*NO_START_OPT)<([a-zA-Z][a-zA-Z0-9+\-.]{1,31}:[^\x00-\x20<>]*)>/A';
 
     // Email autolink: <local@domain> with CommonMark §6.9 local-part and domain rules.
     private const PATTERN_AUTOLINK_EMAIL =
-        "/\G<([a-zA-Z0-9.!#\$%&'*+\/=?^_{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/";
+        "/(*NO_START_OPT)<([a-zA-Z0-9.!#\$%&'*+\/=?^_{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/A";
 
-    // CommonMark §6.6 — inline HTML tag: comment, closing tag, or opening/void tag.
-    // \G anchors to current $pos offset. The s modifier allows . to span newlines in comments.
+    // CommonMark §6.6 — inline HTML open or closing tag, with the spec's tag grammar
+    // (tag name, attributes, optional value). Possessive quantifiers and bounded quoted
+    // values keep a failed match O(1): the former "[^>]*" consumed the rest of the text
+    // on every "<x" without a '>', making such input quadratic. Comments are handled in
+    // scan() with a memoised search for "-->".
     private const PATTERN_RAW_HTML_INLINE =
-        '/\G<(?:!--.*?-->|\/[a-zA-Z][^>]*>|[a-zA-Z][^>]*\/?>)/s';
+        '/(*NO_START_OPT)<(?:\/[A-Za-z][A-Za-z0-9-]*+\s*+>'
+        . '|[A-Za-z][A-Za-z0-9-]*+'
+        . '(?:\s++[A-Za-z_:][A-Za-z0-9_.:-]*+(?:\s*+=\s*+(?:[^\s"\'=<>`]++|\'[^\']{0,1024}+\'|"[^"]{0,1024}+"))?+)*+'
+        . '\s*+\/?>)/A';
 
     /**
      * Matches a well-formed HTML entity at the current position:
@@ -66,10 +82,10 @@ final class InlineParser
      *   - numeric hex:      &#[xX][0-9A-Fa-f]{1,6};
      *   - named:            &[A-Za-z][A-Za-z0-9]{1,31};
      */
-    private const PATTERN_ENTITY = '/\G&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/';
+    private const PATTERN_ENTITY = '/(*NO_START_OPT)&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/A';
 
     /** Matches an inline footnote reference: [^label] anchored at current position. */
-    private const PATTERN_FOOTNOTE_REF = '/\G\[\^([A-Za-z0-9_-]{1,50})\]/';
+    private const PATTERN_FOOTNOTE_REF = '/(*NO_START_OPT)\[\^([A-Za-z0-9_-]{1,50})\]/A';
 
     /** @var array<string, array{href: string, title: ?string}> */
     private array $refs = [];
@@ -126,12 +142,28 @@ final class InlineParser
         $len = strlen($text);
         $pos = 0;
         $buffer = '';
-        /** @var list<array{idx: int, image: bool, start: int}> $brackets */
+        // Bracket stack as two int lists (memory: one entry per '[' of the input):
+        // $brackets = token index * 2 + (1 if '![' else 0), $bracketStarts = label start.
+        /** @var list<int> $brackets */
         $brackets = [];
+        /** @var list<int> $bracketStarts */
+        $bracketStarts = [];
         // Openers below this stack index are inactive: no links inside links (§6.3).
         $inactiveBelow = 0;
+        // Memoised search for the end of an HTML comment: first "-->" at or after
+        // $commentSearchFrom (false: none until the end of the text).
+        $commentSearchFrom = PHP_INT_MAX;
+        $commentEnd        = false;
 
         while ($pos < $len) {
+            // Copy a run of ordinary bytes in one call: only SPECIAL_CHARS start a construct.
+            $run = strcspn($text, self::SPECIAL_CHARS, $pos);
+            if ($run > 0) {
+                $buffer .= substr($text, $pos, $run);
+                $pos    += $run;
+                continue;
+            }
+
             $char = $text[$pos];
 
             // ── Backslash escape: \X where X is ASCII punctuation (CommonMark §2.4) ─
@@ -260,7 +292,8 @@ final class InlineParser
             if ($char === '!' && ($pos + 1) < $len && $text[$pos + 1] === '[') {
                 $this->flushBuffer($buffer, $tokens);
                 $tokens[]   = self::bracketPlaceholder('![');
-                $brackets[] = ['idx' => count($tokens) - 1, 'image' => true, 'start' => $pos + 2];
+                $brackets[]      = (count($tokens) - 1) * 2 + 1;
+                $bracketStarts[] = $pos + 2;
                 $pos += 2;
                 continue;
             }
@@ -298,13 +331,14 @@ final class InlineParser
 
                 $this->flushBuffer($buffer, $tokens);
                 $tokens[]   = self::bracketPlaceholder('[');
-                $brackets[] = ['idx' => count($tokens) - 1, 'image' => false, 'start' => $pos + 1];
+                $brackets[]      = (count($tokens) - 1) * 2;
+                $bracketStarts[] = $pos + 1;
                 $pos++;
                 continue;
             }
 
             if ($char === ']' && $brackets !== []) {
-                $pos = $this->closeBracket($text, $pos, $buffer, $tokens, $brackets, $inactiveBelow);
+                $pos = $this->closeBracket($text, $pos, $buffer, $tokens, $brackets, $bracketStarts, $inactiveBelow);
                 continue;
             }
 
@@ -361,7 +395,23 @@ final class InlineParser
                     $pos += strlen($m[0]);
                     continue;
                 }
-                // 3. Raw inline HTML (§6.6) — existing logic unchanged.
+                // 3. HTML comment (§6.6): "<!-->", "<!--->" or "<!--" … "-->". The position of
+                //    the next "-->" is memoised so repeated "<!--" stays linear.
+                if (substr_compare($text, '<!--', $pos, 4) === 0) {
+                    if ($commentSearchFrom > $pos || ($commentEnd !== false && $commentEnd < $pos + 2)) {
+                        $commentSearchFrom = $pos;
+                        $commentEnd        = strpos($text, '-->', $pos + 2);
+                    }
+                    if ($commentEnd !== false) {
+                        $end = substr_compare($text, '<!-->', $pos, 5) === 0 ? $pos + 5
+                            : (substr_compare($text, '<!--->', $pos, 6) === 0 ? $pos + 6 : $commentEnd + 3);
+                        $this->flushBuffer($buffer, $tokens);
+                        $tokens[] = new RawHtmlInlineNode(substr($text, $pos, $end - $pos));
+                        $pos = $end;
+                        continue;
+                    }
+                }
+                // 4. Raw inline HTML tag (§6.6).
                 if (preg_match(self::PATTERN_RAW_HTML_INLINE, $text, $m, 0, $pos)) {
                     $this->flushBuffer($buffer, $tokens);
                     $tokens[] = new RawHtmlInlineNode($m[0]);
@@ -443,7 +493,8 @@ final class InlineParser
      * Handle ']' when an opener is on the bracket stack (CommonMark §6.3).
      *
      * @param list<DelimiterRun|InlineNodeInterface>      $tokens
-     * @param list<array{idx: int, image: bool, start: int}> $brackets
+     * @param list<int> $brackets      token index * 2 + (1 for '![')
+     * @param list<int> $bracketStarts label start offsets, parallel to $brackets
      * @return int new cursor position
      */
     private function closeBracket(
@@ -452,15 +503,19 @@ final class InlineParser
         string &$buffer,
         array  &$tokens,
         array  &$brackets,
+        array  &$bracketStarts,
         int    &$inactiveBelow,
     ): int {
-        $opener = array_pop($brackets);
+        $packed    = (int) array_pop($brackets);
+        $start     = (int) array_pop($bracketStarts);
+        $openerIdx = $packed >> 1;
+        $isImage   = ($packed & 1) === 1;
         // After a link forms, earlier '[' openers are inactive; '![' openers stay active.
-        $active = $opener['image'] || count($brackets) >= $inactiveBelow;
+        $active = $isImage || count($brackets) >= $inactiveBelow;
         $inactiveBelow = min($inactiveBelow, count($brackets));
 
         $match = $active
-            ? $this->matchLinkTail($text, $pos + 1, substr($text, $opener['start'], $pos - $opener['start']))
+            ? $this->matchLinkTail($text, $pos + 1, substr($text, $start, $pos - $start))
             : null;
         if ($match === null || !UrlValidator::isSafe($match['href'])) {
             // Not a link (or an unsafe URL — XSS prevention): ']' is literal text and the
@@ -470,21 +525,28 @@ final class InlineParser
         }
 
         $this->flushBuffer($buffer, $tokens);
-        $children = (new DelimiterStack())->resolve(array_slice($tokens, $opener['idx'] + 1));
+        $children = (new DelimiterStack())->resolve(array_slice($tokens, $openerIdx + 1));
         // Drop the opener and the link text from the tail. array_pop is O(removed);
         // array_splice would rebuild the whole token list on every link.
-        while (count($tokens) > $opener['idx']) {
+        while (count($tokens) > $openerIdx) {
             array_pop($tokens);
         }
 
-        if ($opener['image']) {
+        if ($isImage) {
             $tokens[] = new ImageNode(src: $match['href'], alt: $this->plainText($children), title: $match['title']);
         } else {
             // Footnote references are links themselves: move them after the link rather
             // than nesting <a> inside <a>.
-            $footnotes = array_values(array_filter($children, static fn($n) => $n instanceof FootnoteRefNode));
-            $children  = array_values(array_filter($children, static fn($n) => !$n instanceof FootnoteRefNode));
-            $tokens[]  = new LinkNode(href: $match['href'], children: $children, title: $match['title']);
+            $linkChildren = [];
+            $footnotes    = [];
+            foreach ($children as $child) {
+                if ($child instanceof FootnoteRefNode) {
+                    $footnotes[] = $child;
+                } else {
+                    $linkChildren[] = $child;
+                }
+            }
+            $tokens[] = new LinkNode(href: $match['href'], children: $linkChildren, title: $match['title']);
             array_push($tokens, ...$footnotes);
             // No links inside links: every '[' opener still on the stack becomes inactive.
             $inactiveBelow = count($brackets);
@@ -564,6 +626,10 @@ final class InlineParser
             // <…>: no line endings, no unescaped '<' or '>'.
             $start = $pos + 1;
             for ($i = $start; $i < $len; $i++) {
+                $i += strcspn($text, "\\<>\n", $i); // skip ordinary bytes in one call
+                if ($i >= $len) {
+                    break;
+                }
                 $c = $text[$i];
                 if ($c === '\\' && $i + 1 < $len) {
                     $i++;
@@ -586,6 +652,10 @@ final class InlineParser
             $start = $pos;
             $depth = 0;
             for ($i = $pos; $i < $len; $i++) {
+                $i += strcspn($text, self::RAW_DESTINATION_STOP, $i); // skip ordinary bytes in one call
+                if ($i >= $len) {
+                    break;
+                }
                 $c = $text[$i];
                 if ($c === '\\' && $i + 1 < $len && str_contains(self::ESCAPABLE_CHARS, $text[$i + 1])) {
                     $i++;
@@ -619,7 +689,12 @@ final class InlineParser
         $opener = $text[$afterWs] ?? '';
         if ($afterWs > $pos && ($opener === '"' || $opener === "'" || $opener === '(')) {
             $closer = $opener === '(' ? ')' : $opener;
+            $stop   = '\\' . $closer . ($opener === '(' ? '(' : '');
             for ($i = $afterWs + 1; $i < $len; $i++) {
+                $i += strcspn($text, $stop, $i); // skip ordinary bytes in one call
+                if ($i >= $len) {
+                    break;
+                }
                 $c = $text[$i];
                 if ($c === '\\' && $i + 1 < $len) {
                     $i++;
@@ -711,6 +786,9 @@ final class InlineParser
     /** Resolve backslash escapes and entity references in a destination or title. */
     private function decodeLinkText(string $raw): string
     {
+        if (!str_contains($raw, '\\') && !str_contains($raw, '&')) {
+            return $raw; // nothing to decode (the common case)
+        }
         return (string) preg_replace_callback(
             '/\\\\([!-\/:-@\[-`{-~])|&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/',
             static function (array $m): string {

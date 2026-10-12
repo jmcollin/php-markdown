@@ -78,8 +78,10 @@ final class FlankingComputer
         if ($ch === '') {
             return true;
         }
-        if (in_array($ch, [' ', "\t", "\n", "\r"], true)) {
-            return true;
+        if (strlen($ch) === 1) {
+            // ASCII: \p{Z} is the space, \p{C} the C0 controls and DEL.
+            $o = ord($ch);
+            return $o <= 0x20 || $o === 0x7F;
         }
         return (bool) preg_match('/^[\p{Z}\p{C}]/u', $ch);
     }
@@ -88,6 +90,10 @@ final class FlankingComputer
     {
         if ($ch === '') {
             return false;
+        }
+        if (strlen($ch) === 1) {
+            // ASCII: \p{P} ∪ \p{S} is exactly the ctype_punct set.
+            return ctype_punct($ch);
         }
         return (bool) preg_match('/^[\p{P}\p{S}]/u', $ch);
     }

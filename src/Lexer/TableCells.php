@@ -25,6 +25,11 @@ final class TableCells
             $line = substr($line, 0, -1);
         }
 
+        if (!str_contains($line, '\\')) {
+            // No escapes: every pipe separates cells.
+            return array_map(static fn(string $c): string => trim($c, " \t"), explode('|', $line));
+        }
+
         $cells = [];
         $cell  = '';
         $len   = strlen($line);
