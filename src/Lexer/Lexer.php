@@ -375,8 +375,6 @@ final class Lexer
                 continue;
             }
 
-            $listOpen = $this->lastNonBlankIsListItem($tokens, $listOpenCache);
-
             // List item continuation: paragraph text right after an item (no blank line in
             // between) continues that item's text, whether indented or lazy (§5.2, §5.1).
             $lastToken = end($tokens);
@@ -395,7 +393,7 @@ final class Lexer
             // indented 4+ columns is a list item only inside an open list.
             if (!$hadPendingLines
                 && preg_match('/^    (.*)$/s', $expanded, $m)
-                && (!$listOpen
+                && (!$this->lastNonBlankIsListItem($tokens, $listOpenCache)
                     || (!preg_match(self::PATTERN_UNORDERED_LIST, $line) && !preg_match(self::PATTERN_ORDERED_LIST, $line)))
             ) {
                 $inIndentedBlock = true;
@@ -407,7 +405,8 @@ final class Lexer
             $token = $this->matchLine($line);
 
             if ($token->type === TokenType::LIST_ITEM) {
-                $token = $this->placeListItem($token, $line, $listOpen, $hadPendingLines, $listColumns);
+                $listOpen = $this->lastNonBlankIsListItem($tokens, $listOpenCache);
+                $token    = $this->placeListItem($token, $line, $listOpen, $hadPendingLines, $listColumns);
             }
 
             // GFM tables: a header row is only a table when the next line is a delimiter
@@ -638,6 +637,9 @@ final class Lexer
      */
     private function expandTabs(string $line, int $startCol = 0): string
     {
+        if (!str_contains($line, "\t")) {
+            return $line; // nothing to expand (the common case)
+        }
         $out = '';
         $col = $startCol;
         $len = strlen($line);
@@ -718,6 +720,12 @@ final class Lexer
     {
         if ($line === '' || ctype_space($line)) {
             return false;
+        }
+        // Every block start below begins (after 0-3 spaces) with one of these bytes;
+        // any other first byte is plain text without running the patterns.
+        $first = ltrim($line, ' ')[0] ?? '';
+        if (strpbrk($first, '`~<-*_#>+:0123456789') === false) {
+            return true;
         }
         return !preg_match(self::PATTERN_FENCED_OPEN, $line)
             && !preg_match($this->patternHtmlBlockStart, $line)

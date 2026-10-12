@@ -441,6 +441,10 @@ final class Parser
      */
     private function nestedLinkDefinitions(string $markdown, int $depth): array
     {
+        // A definition starts with '[' after at most 3 spaces: skip the re-lex otherwise.
+        if (!preg_match('/^ {0,3}\[/m', $markdown)) {
+            return [];
+        }
         $tokens = $this->withContainerDefinitions((new Lexer())->tokenize($markdown), $depth + 1);
         return array_values(array_filter(
             $tokens,

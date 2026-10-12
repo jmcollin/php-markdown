@@ -35,12 +35,13 @@ final class UrlValidator
      */
     public static function isSafe(string $url): bool
     {
-        if (preg_match('/[\x00-\x1F\x7F]/', rawurldecode($url))) {
+        $decoded = str_contains($url, '%') ? rawurldecode($url) : $url;
+        if (preg_match('/[\x00-\x1F\x7F]/', $decoded)) {
             return false;
         }
         // Defence in depth: judge both the URL and its percent-decoded form
         // ("%6Aavascript:" is not a scheme for browsers, but is rejected anyway).
-        return self::hasSafeScheme($url) && self::hasSafeScheme(rawurldecode($url));
+        return self::hasSafeScheme($url) && ($decoded === $url || self::hasSafeScheme($decoded));
     }
 
     private static function hasSafeScheme(string $url): bool
