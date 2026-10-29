@@ -12,6 +12,7 @@ A lightweight, standalone PHP library (8.2–8.4) that parses CommonMark-flavore
 ## Requirements
 
 - PHP **8.2** to **8.4**
+- PHP extensions: `ctype`, `intl`, `mbstring`
 - No external packages required for core usage
 
 ---
@@ -126,7 +127,7 @@ MD;
 
 echo $meta['title'];     // My Post
 echo $meta['published']; // true (bool)
-echo $html;              // <h1>My Post</h1><p>Content here.</p>
+echo $html;              // <h1>My Post</h1>\n<p>Content here.</p>\n
 ```
 
 `parse()` also accepts front matter — it strips the block silently, so existing code needs no changes.
@@ -163,18 +164,18 @@ $html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
 
 | Feature | Syntax | Output |
 |---------|--------|--------|
-| Headings H1–H6 (ATX) | `# Heading` … `###### Heading` | `<h1>` … `<h6>` |
-| Headings H1–H2 (Setext) | `Heading\n===` / `Heading\n---` | `<h1>` / `<h2>` |
-| Paragraph | plain text | `<p>` |
+| Headings H1–H6 (ATX) | `# Heading` … `###### Heading` (empty content allowed: `# `) | `<h1>` … `<h6>` |
+| Headings H1–H2 (Setext) | `Heading\n===` / `Heading\n---` (multiline content supported) | `<h1>` / `<h2>` |
+| Paragraph | plain text (soft line breaks preserved as newlines) | `<p>` |
 | Blockquote (nested) | `> text` | `<blockquote>` |
 | Unordered list | `- item` / `* item` / `+ item` | `<ul><li>` |
 | Ordered list | `1. item` | `<ol><li>` |
 | Nested lists | indented `- item` inside list item | `<ul>` inside `<li>` |
 | Task list | `- [x] done` / `- [ ] todo` | `<li><input type="checkbox" …>` |
-| Fenced code block | ```` ```lang … ``` ```` | `<pre><code class="language-*">` |
+| Fenced code block | ```` ```lang … ``` ```` or `~~~lang … ~~~` | `<pre><code class="language-*">` |
 | Mermaid diagram | ```` ```mermaid … ``` ```` | `<div class="mermaid">` |
 | Indented code block | 4-space / 1-tab indent | `<pre><code>` |
-| Horizontal rule | `---` / `***` / `___` | `<hr>` |
+| Horizontal rule | `---` / `***` / `___` | `<hr />` |
 | GFM Table | `\| col \| col \|` + separator row | `<table><thead><tbody>` with `align` |
 | Front Matter | `---\nkey: value\n---` at file top | parsed into `meta` array via `parseWithMeta()` |
 | Raw HTML block | `<div>…</div>` | escaped (default) or sanitized (`allowRawHtml: true`) |
@@ -189,12 +190,13 @@ $html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
 | Italic | `*text*` or `_text_` | `<em>` |
 | Strikethrough | `~~text~~` | `<del>` |
 | Inline code | `` `code` `` | `<code>` |
-| Link (inline) | `[text](url)` or `[text](url "title")` | `<a href="…">` |
-| Link (reference) | `[text][ref]` with `[ref]: url` definition | `<a href="…">` |
-| Image | `![alt](src)` or `![alt](src "title")` | `<img src="…" alt="…">` |
+| Link (inline) | `[text](url)` or `[text](<url>)`, optional title in `"…"`, `'…'` or `(…)` | `<a href="…">` |
+| Link (reference) | `[text][ref]` with `[ref]: url` or `[ref]: <url>` definition | `<a href="…">` |
+| Image | `![alt](src)`, `![alt](src "title")` or `![alt][ref]` | `<img src="…" alt="…" />` |
 | Autolink | `<https://…>` or `<user@example.com>` | `<a href="…">` |
-| Hard line break | two trailing spaces + newline | `<br>` |
-| HTML entity | `&amp;`, `&#42;`, etc. | passed through verbatim |
+| Hard line break | two trailing spaces + newline | `<br />` |
+| HTML entity / numeric reference | `&copy;`, `&#42;`, `&#x2A;` | decoded to the character, then re-escaped |
+| Backslash escape | `\*not emphasis\*` | literal punctuation |
 | Raw HTML inline | `<span class="x">` | escaped (default) or sanitized (`allowRawHtml: true`) |
 | Footnote reference | `[^label]` | `<sup><a href="#fn-…">` |
 
@@ -217,10 +219,10 @@ Input string
 
 | Class | Responsibility |
 |-------|---------------|
-| `Lexer` | Tokenises the input line by line into `Token[]` |
+| `Lexer` | Tokenises the input line by line into `Token[]` (tabs expanded to 4-column stops, CommonMark §2.1) |
 | `InlineParser` | Recursive delimiter-stack scanner for inline elements |
 | `Parser` | Consumes `Token[]` and builds a `DocumentNode` AST |
-| `HtmlRenderer` | Traverses the AST and emits escaped HTML5 |
+| `HtmlRenderer` | Traverses the AST and emits escaped HTML; void elements are self-closed (`<br />`, `<hr />`, `<img … />`) as in the CommonMark spec |
 | `HtmlSanitizer` | DOM-based sanitizer used when `allowRawHtml: true` |
 | `FrontMatterParser` | Extracts and parses the YAML-subset front matter block |
 | `IcuNormalizer` | NFC-normalizes input via PHP `intl` if available |
