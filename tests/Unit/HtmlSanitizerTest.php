@@ -393,4 +393,43 @@ final class HtmlSanitizerTest extends TestCase
         $result = $this->sanitizer->sanitize('<a href="/path/to/page">local</a>');
         $this->assertStringContainsString('href="/path/to/page"', $result);
     }
+
+    // -------------------------------------------------------------------------
+    // Inline tags (one tag at a time — inline HTML reaches the renderer tag by tag,
+    // so it must obey the same allowlist as block HTML instead of a regex blocklist)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @return array<string, array{input: string, expected: string}>
+     */
+    public static function inlineTagProvider(): array
+    {
+        return [
+            'safe open tag kept'          => ['input' => '<span class="x">', 'expected' => '<span class="x">'],
+            'safe close tag kept'         => ['input' => '</span>', 'expected' => '</span>'],
+            'self-closing void kept'      => ['input' => '<br />', 'expected' => '<br />'],
+            'safe href kept'              => ['input' => '<a href="https://example.com">', 'expected' => '<a href="https://example.com">'],
+            'script open dropped'         => ['input' => '<script>', 'expected' => ''],
+            'script close dropped'        => ['input' => '</script>', 'expected' => ''],
+            'iframe dropped'              => ['input' => '<iframe src="//evil">', 'expected' => ''],
+            'base dropped'                => ['input' => '<base href="https://evil/">', 'expected' => ''],
+            'meta refresh dropped'        => ['input' => '<meta http-equiv="refresh" content="0;url=https://evil">', 'expected' => ''],
+            'svg onload dropped'          => ['input' => '<svg onload="alert(1)">', 'expected' => ''],
+            'unknown tag dropped'         => ['input' => '<blink>', 'expected' => ''],
+            'comment dropped'             => ['input' => '<!-- c -->', 'expected' => ''],
+            'processing instr dropped'    => ['input' => '<?php echo 1; ?>', 'expected' => ''],
+            'slash-separated handler'     => ['input' => '<img/onerror=alert(1) src="x.png">', 'expected' => '<img src="x.png">'],
+            'entity-encoded javascript'   => ['input' => '<a href="&#106;avascript:alert(1)">', 'expected' => '<a>'],
+            'leading-space javascript'    => ['input' => '<a href=" javascript:alert(1)">', 'expected' => '<a>'],
+            'non-allowlisted attr'        => ['input' => '<span data-x="1" formaction="javascript:1">', 'expected' => '<span>'],
+            'attribute value re-escaped'  => ['input' => '<span title=\'a"b\'>', 'expected' => '<span title="a&quot;b">'],
+            'target blank gets noopener'  => ['input' => '<a href="/p" target="_blank">', 'expected' => '<a href="/p" target="_blank" rel="noopener">'],
+        ];
+    }
+
+    #[DataProvider('inlineTagProvider')]
+    public function testSanitizeInlineTag(string $input, string $expected): void
+    {
+        $this->assertSame($expected, $this->sanitizer->sanitizeInlineTag($input));
+    }
 }

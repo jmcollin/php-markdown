@@ -245,6 +245,7 @@ Dangerous URL schemes (`javascript:`, `vbscript:`, `data:`) in links are detecte
 - Unknown tags are unwrapped (children promoted).
 - All `on*` event handlers, `style`, and `javascript:`/`data:` URL attributes are stripped.
 - `target="_blank"` links get `rel="noopener"` injected automatically.
+- Inline HTML is sanitized tag by tag with the same allowlist: only safe inline tags (`a`, `em`, `span`, `img`, …) are kept, rebuilt from their allowed attributes; any other tag, comment or declaration is dropped (surrounding text stays escaped).
 
 ---
 

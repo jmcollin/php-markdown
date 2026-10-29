@@ -86,4 +86,25 @@ final class HtmlPassthroughTest extends TestCase
         // The parser rejects the reference entirely — no anchor tag created.
         $this->assertStringNotContainsString('<a', $html);
     }
+
+    // -------------------------------------------------------------------------
+    // Test 4 — Inline HTML obeys the same tag allowlist as block HTML
+    // -------------------------------------------------------------------------
+
+    public function testInlineForbiddenTagsAndBypassesNeutralisedInAllowRawHtmlMode(): void
+    {
+        $md = 'a <script>alert(1)</script> b <iframe src="//evil"></iframe>'
+            . ' <img/onerror=alert(2) src="x.png">'
+            . ' <a href="&#106;avascript:alert(3)">x</a> <em>ok</em>';
+
+        $html = $this->parser->parse($md, allowRawHtml: true);
+
+        $this->assertStringNotContainsString('<script', $html);
+        $this->assertStringNotContainsString('<iframe', $html);
+        $this->assertStringNotContainsString('onerror', $html);
+        $this->assertStringNotContainsString('avascript', $html);
+        $this->assertStringContainsString('<img src="x.png">', $html);
+        $this->assertStringContainsString('<a>x</a>', $html);
+        $this->assertStringContainsString('<em>ok</em>', $html);
+    }
 }

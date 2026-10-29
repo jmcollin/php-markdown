@@ -103,6 +103,52 @@ final class HtmlSanitizer
         return trim($output);
     }
 
+    /**
+     * Sanitizes a single inline HTML tag (opening, closing, or self-closing).
+     *
+     * Inline raw HTML reaches the renderer one tag at a time, so a full DOM pass
+     * would auto-close fragments. Instead the tag is parsed by libxml (browser-like
+     * attribute parsing), checked against the inline allowlist, and rebuilt from
+     * the surviving attributes only. Anything else (forbidden or unknown tags,
+     * comments, declarations, processing instructions) is dropped.
+     */
+    public function sanitizeInlineTag(string $tag): string
+    {
+        if (preg_match('/^<\/([A-Za-z][A-Za-z0-9-]*)\s*>$/', $tag, $m) === 1) {
+            $name = strtolower($m[1]);
+            return in_array($name, self::SAFE_INLINE_TAGS, true) ? '</' . $name . '>' : '';
+        }
+
+        if (preg_match('/^<([A-Za-z][A-Za-z0-9-]*)/', $tag, $m) !== 1) {
+            return '';
+        }
+
+        $name = strtolower($m[1]);
+        if (!in_array($name, self::SAFE_INLINE_TAGS, true)) {
+            return '';
+        }
+
+        libxml_use_internal_errors(true);
+        $dom    = new \DOMDocument();
+        $loaded = $dom->loadHTML('<meta charset="UTF-8">' . $tag, LIBXML_NOERROR | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+
+        $el = $loaded !== false ? $dom->getElementsByTagName($name)->item(0) : null;
+        if ($el === null) {
+            return '';
+        }
+
+        $this->sanitizeAttributes($el);
+
+        $out = '<' . $name;
+        foreach (iterator_to_array($el->attributes) as $attrNode) {
+            $out .= ' ' . strtolower($attrNode->name) . '="'
+                . htmlspecialchars($attrNode->value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+        }
+
+        return $out . (str_ends_with($tag, '/>') ? ' />' : '>');
+    }
+
     private function walkNode(\DOMNode $node): void
     {
         // Collect phase — snapshot children before any mutation

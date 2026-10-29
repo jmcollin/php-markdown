@@ -89,11 +89,11 @@ final class HtmlRenderer
             $node instanceof ImageNode        => $this->renderImage($node),
             $node instanceof TableNode        => $this->renderTable($node),
             $node instanceof TableRowNode     => $this->renderTableRow($node),
-            // Inline HTML: regex-strip dangerous attrs if allowRawHtml (DOMDocument auto-closes fragments),
-            // else escape. Strips on*, style, and javascript:/data: URL attrs.
+            // Inline HTML: sanitize tag by tag against the same allowlist as blocks if allowRawHtml,
+            // else escape.
             $node instanceof RawHtmlInlineNode =>
                 $this->allowRawHtml
-                    ? $this->stripInlineAttrs($node->content)
+                    ? $this->sanitizer->sanitizeInlineTag($node->content)
                     : $this->esc($node->content),
             $node instanceof AutolinkNode           => $this->renderAutolink($node),
             $node instanceof FootnoteRefNode        => $this->renderFootnoteRef($node),
@@ -270,21 +270,6 @@ final class HtmlRenderer
             . '<div class="min-w-0">' . $this->renderChildren($node->leftChildren) . '</div>'
             . '<div class="min-w-0">' . $this->renderChildren($node->rightChildren) . '</div>'
             . '</div>';
-    }
-
-    private function stripInlineAttrs(string $tag): string
-    {
-        // Strip all on* event handler attributes (onclick, onerror, onload, etc.).
-        $tag = preg_replace('/\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
-        // Strip style attribute (CSS expression / url(javascript:...) vectors).
-        $tag = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>\/]*)/i', '', $tag) ?? $tag;
-        // Strip href/src/action with javascript: or data: scheme.
-        $tag = preg_replace(
-            '/\s+(?:href|src|action|formaction)\s*=\s*(?:"(?:javascript|data)[^"]*"|\'(?:javascript|data)[^\']*\'|(?:javascript|data)[^\s>\/]*)/i',
-            '',
-            $tag,
-        ) ?? $tag;
-        return $tag;
     }
 
     private function renderFootnoteRef(FootnoteRefNode $node): string
