@@ -181,6 +181,8 @@ $html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
 | Two-column layout | `:::columns … \|\|\| … :::` | `<div class="grid grid-cols-2 …">` |
 | Footnote definition | `[^label]: body` | rendered in `<section class="footnotes">` |
 
+ATX headings, thematic breaks and blockquote markers may be preceded by up to 3 spaces; 4 or more spaces start an indented code block instead.
+
 ### Inline elements
 
 | Feature | Syntax | Output |

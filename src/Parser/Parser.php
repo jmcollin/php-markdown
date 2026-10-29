@@ -217,7 +217,7 @@ final class Parser
         $group = [];
 
         foreach ($tokens as $idx => $token) {
-            $content = preg_replace('/^(?:[ ]{1,3}|\t)/', '', $token->content) ?? $token->content;
+            $content = preg_replace('/^(?:[ ]{1,4}|\t)/', '', $token->content) ?? $token->content;
             $isHardBreak = ($token->meta['hard_break'] ?? false) === true;
             $isLast = ($idx === $lastIdx);
 

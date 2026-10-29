@@ -12,9 +12,9 @@ namespace PhpMarkdown\Lexer;
  */
 final class Lexer
 {
-    private const PATTERN_HEADING           = '/^(#{1,6})\s+(.*)$/';
+    private const PATTERN_HEADING           = '/^ {0,3}(#{1,6})(?:\s+(.*?)|\s*)$/';
     private const PATTERN_FENCED_OPEN      = '/^ {0,3}([`~]{3,})\s*(\S*)\s*$/';
-    private const PATTERN_BLOCKQUOTE       = '/^((?:>[ \t]*)++)(.*)/';
+    private const PATTERN_BLOCKQUOTE       = '/^ {0,3}((?:>[ \t]*)++)(.*)/';
     private const PATTERN_UNORDERED_LIST   = '/^( *)[-*+]\s+(.+)/';
     private const PATTERN_ORDERED_LIST     = '/^( *)\d+\.\s+(.+)/';
     private const PATTERN_HORIZONTAL_RULE  = '/^[ \t]{0,3}([-*_])([ \t]*\1){2,}[ \t]*$/';
@@ -519,6 +519,12 @@ final class Lexer
     {
         $pos = 0;
         $len = strlen($expandedLine);
+        // Skip 0–3 optional leading spaces before the first '>' marker (CommonMark §5.1).
+        $skipped = 0;
+        while ($skipped < 3 && $pos < $len && $expandedLine[$pos] === ' ') {
+            $pos++;
+            $skipped++;
+        }
         for ($l = 0; $l < $level; $l++) {
             if ($pos < $len && $expandedLine[$pos] === '>') {
                 $pos++;
@@ -542,7 +548,7 @@ final class Lexer
         }
 
         if (preg_match(self::PATTERN_HEADING, $line, $m)) {
-            $content = (string) preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2]));
+            $content = preg_replace('/\s+#+\s*$|^#+$/', '', trim($m[2] ?? '')) ?? trim($m[2] ?? '');
             return new Token(
                 TokenType::HEADING,
                 $content,
