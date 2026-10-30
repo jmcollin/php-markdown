@@ -270,6 +270,28 @@ php test.php
 
 ---
 
+## Benchmark
+
+`benchmark/` compares this library with [league/commonmark](https://github.com/thephpleague/commonmark), [Parsedown](https://github.com/erusev/parsedown) and [michelf/php-markdown](https://github.com/michelf/php-markdown) on the same generated document (headings, emphasis, links, lists, fenced code, blockquote, table) in three sizes. It installs the library from the parent directory as a Composer path repository, so it measures your working copy.
+
+```bash
+cd benchmark
+composer install   # copies the parent directory into vendor/ — re-run after changing src/
+php benchmark-markdown.php
+```
+
+Sample run (PHP 8.2.29, Windows x64, no OPcache/JIT), lower is better:
+
+| Document | php-markdown/parser | Parsedown | michelf/php-markdown | league/commonmark |
+|----------|--------------------:|----------:|---------------------:|------------------:|
+| small (1 KB, 1,000 runs) | 1.41 ms | 0.84 ms | 1.05 ms | 4.28 ms |
+| medium (10 KB, 200 runs) | 12.59 ms | 8.29 ms | 9.86 ms | 34.70 ms |
+| large (82 KB, 20 runs) | 99.77 ms | 94.75 ms | 94.51 ms | 268.79 ms |
+
+Timings vary by machine; compare parsers within a single run. The memory column printed by the script is the `memory_get_usage()` delta across the loop, not peak usage, so it is not reported here.
+
+---
+
 ## Limitations
 
 The following are **not** supported:
