@@ -30,6 +30,9 @@ final class InlineParser
     /** Maximum nesting depth for recursive inline parsing (prevents stack overflow). */
     private const MAX_DEPTH = 64;
 
+    /** Longest link label, in bytes (CommonMark §4.7 allows at most 999 characters). */
+    private const MAX_LABEL_LENGTH = 999;
+
     /**
      * All 32 ASCII punctuation characters that may be backslash-escaped per CommonMark §2.4.
      * Membership test uses str_contains — no regex on the hot path.
@@ -101,24 +104,30 @@ final class InlineParser
      *        Keyed by raw (case-sensitive) label. Mutated during scan():
      *        - 'number' int is assigned on first reference encounter.
      *        - 'occurrences' int is incremented on every encounter.
+     * @param ?int $footnoteCounter Highest footnote number assigned so far, updated on return.
+     *        Callers parsing many inline runs keep it between calls: when null it is recomputed
+     *        from $footnoteDefinitions, which per run would be quadratic in a whole document.
      * @psalm-suppress UnusedParam
      * @return InlineNodeInterface[]
      */
-    public function parse(string $text, array $refs = [], array &$footnoteDefinitions = []): array
+    public function parse(string $text, array $refs = [], array &$footnoteDefinitions = [], ?int &$footnoteCounter = null): array
     {
         $this->refs               = $refs;
         $this->footnoteDefinitions = &$footnoteDefinitions;
         // Restore counter to max already-assigned number so each parse() call continues
         // from where the previous one left off (footnotes span multiple paragraphs).
-        $this->footnoteNextNumber = 0;
-        foreach ($this->footnoteDefinitions as $def) {
-            if (isset($def['number']) && $def['number'] > $this->footnoteNextNumber) {
-                $this->footnoteNextNumber = $def['number'];
+        $this->footnoteNextNumber = $footnoteCounter ?? 0;
+        if ($footnoteCounter === null) {
+            foreach ($this->footnoteDefinitions as $def) {
+                if (isset($def['number']) && $def['number'] > $this->footnoteNextNumber) {
+                    $this->footnoteNextNumber = $def['number'];
+                }
             }
         }
         try {
             return $this->scan($text, 0);
         } finally {
+            $footnoteCounter = $this->footnoteNextNumber;
             $this->refs = [];
             // Unset the reference to the caller's array before re-initialising the property,
             // so the caller's array retains the mutations (assigned numbers, occurrence counts).
@@ -154,6 +163,10 @@ final class InlineParser
         // $commentSearchFrom (false: none until the end of the text).
         $commentSearchFrom = PHP_INT_MAX;
         $commentEnd        = false;
+        // Built on the first code span search that fails, see backtickRuns().
+        /** @var ?list<array{int, int}> $backtickRuns */
+        $backtickRuns = null;
+        $backtickRun  = 0;
 
         while ($pos < $len) {
             // Copy a run of ordinary bytes in one call: only SPECIAL_CHARS start a construct.
@@ -183,8 +196,20 @@ final class InlineParser
                     $btCount++;
                     $tmp++;
                 }
-                $closer = str_repeat('`', $btCount);
-                $closePos = strpos($text, $closer, $tmp);
+                // Once a search has failed, later ones consult the run table first: a failed
+                // strpos reads the whole rest of the text, which adds up to quadratic when
+                // many backtick runs have no closer.
+                if ($backtickRuns !== null) {
+                    while (isset($backtickRuns[$backtickRun]) && $backtickRuns[$backtickRun][0] < $tmp) {
+                        $backtickRun++;
+                    }
+                }
+                $closePos = $backtickRuns !== null && ($backtickRuns[$backtickRun][1] ?? 0) < $btCount
+                    ? false
+                    : strpos($text, str_repeat('`', $btCount), $tmp);
+                if ($closePos === false) {
+                    $backtickRuns ??= self::backtickRuns($text);
+                }
                 if ($closePos !== false) {
                     $this->flushBuffer($buffer, $tokens);
                     $raw = substr($text, $tmp, $closePos - $tmp);
@@ -430,6 +455,32 @@ final class InlineParser
     }
 
     /**
+     * Every backtick run of $text, in order: [start offset, longest run from this one on].
+     * A code span closer of length n exists after an offset if and only if the first run
+     * after it has a "longest" of at least n.
+     *
+     * @return list<array{int, int}>
+     */
+    private static function backtickRuns(string $text): array
+    {
+        $runs = [];
+        $len  = strlen($text);
+        $pos  = strcspn($text, '`');
+        while ($pos < $len) {
+            $run    = strspn($text, '`', $pos);
+            $runs[] = [$pos, $run];
+            $pos   += $run;
+            $pos   += strcspn($text, '`', $pos);
+        }
+        $longest = 0;
+        for ($i = count($runs) - 1; $i >= 0; $i--) {
+            $longest     = max($longest, $runs[$i][1]);
+            $runs[$i][1] = $longest;
+        }
+        return $runs;
+    }
+
+    /**
      * Processes a backslash at $pos and returns the new cursor position.
      *
      * Three paths (CommonMark §2.4):
@@ -515,7 +566,7 @@ final class InlineParser
         $inactiveBelow = min($inactiveBelow, count($brackets));
 
         $match = $active
-            ? $this->matchLinkTail($text, $pos + 1, substr($text, $start, $pos - $start))
+            ? $this->matchLinkTail($text, $pos + 1, $start)
             : null;
         if ($match === null || !UrlValidator::isSafe($match['href'])) {
             // Not a link (or an unsafe URL — XSS prevention): ']' is literal text and the
@@ -557,11 +608,13 @@ final class InlineParser
 
     /**
      * Try, at $pos (just after ']'), an inline destination "(…)", then a full
-     * "[label]", collapsed "[]" or shortcut reference.
+     * "[label]", collapsed "[]" or shortcut reference. The opener's label runs from
+     * $labelStart to the ']' at $pos - 1; it is only copied once known to be short enough,
+     * as nested brackets would otherwise copy most of the text at each ']'.
      *
      * @return array{href: string, title: ?string, end: int}|null
      */
-    private function matchLinkTail(string $text, int $pos, string $openerLabel): ?array
+    private function matchLinkTail(string $text, int $pos, int $labelStart): ?array
     {
         if (($text[$pos] ?? '') === '(') {
             $inline = $this->parseInlineDestination($text, $pos + 1);
@@ -586,6 +639,11 @@ final class InlineParser
             }
         }
 
+        $labelLength = $pos - 1 - $labelStart;
+        if ($labelLength > self::MAX_LABEL_LENGTH) {
+            return null;
+        }
+        $openerLabel = substr($text, $labelStart, $labelLength);
         if (!$this->isValidLinkLabel($openerLabel)) {
             return null;
         }
@@ -767,8 +825,7 @@ final class InlineParser
 
     private function isValidLinkLabel(string $label): bool
     {
-        return strlen($label) <= 999
-            && trim($label, " \t\n") !== ''
+        return trim($label, " \t\n") !== ''
             && $this->scanLinkLabel('[' . $label . ']', 0) !== null;
     }
 

@@ -43,6 +43,9 @@ final class Parser
     /** @var array<string, array{body: string, number?: int, occurrences?: int}> */
     private array $footnoteDefs = [];
 
+    /** Highest footnote number assigned so far in the current document. */
+    private int $footnoteCounter = 0;
+
     public function __construct()
     {
         $this->inlineParser = new InlineParser();
@@ -56,6 +59,7 @@ final class Parser
     {
         ['refs'   => $this->linkRefs,  'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
         ['defs'   => $this->footnoteDefs, 'tokens' => $tokens] = $this->extractFootnoteDefinitions($tokens);
+        $this->footnoteCounter = 0;
 
         $blockChildren = $this->parseBlocks($tokens);
 
@@ -66,6 +70,14 @@ final class Parser
         }
 
         return new DocumentNode($blockChildren);
+    }
+
+    /**
+     * @return InlineNodeInterface[]
+     */
+    private function parseInline(string $text): array
+    {
+        return $this->inlineParser->parse($text, $this->linkRefs, $this->footnoteDefs, $this->footnoteCounter);
     }
 
     /**
@@ -92,7 +104,7 @@ final class Parser
             if ($token->type === TokenType::HEADING) {
                 $children[] = new HeadingNode(
                     level: $token->meta['level'],
-                    children: $this->inlineParser->parse($token->content, $this->linkRefs, $this->footnoteDefs),
+                    children: $this->parseInline($token->content),
                 );
                 $i++;
                 continue;
@@ -229,7 +241,7 @@ final class Parser
             $group[] = $content;
 
             if ($isHardBreak || $isLast) {
-                $nodes = $this->inlineParser->parse(implode("\n", $group), $this->linkRefs, $this->footnoteDefs);
+                $nodes = $this->parseInline(implode("\n", $group));
                 array_push($result, ...$nodes);
                 $group = [];
 
@@ -264,7 +276,7 @@ final class Parser
             && ($tokens[$i]->meta['marker'] ?? null) === $marker
         ) {
             $itemToken      = $tokens[$i];
-            $inlineChildren = $this->inlineParser->parse($itemToken->content, $this->linkRefs, $this->footnoteDefs);
+            $inlineChildren = $this->parseInline($itemToken->content);
             $i++;
 
             // Deeper list items belong to this item. Several sub-lists may follow each
@@ -345,7 +357,7 @@ final class Parser
         $nodes = [];
         for ($idx = 0; $idx < $columns; $idx++) {
             $nodes[] = new TableCellNode(
-                children: $this->inlineParser->parse($cells[$idx] ?? '', $this->linkRefs, $this->footnoteDefs),
+                children: $this->parseInline($cells[$idx] ?? ''),
                 align: $aligns[$idx] ?? '',
             );
         }
