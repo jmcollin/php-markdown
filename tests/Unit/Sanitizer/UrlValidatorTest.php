@@ -23,6 +23,9 @@ final class UrlValidatorTest extends TestCase
             'inner space'           => ['/my uri'],
             'percent-encoded space' => ['foo%20bar'],
             'uppercase scheme'      => ['HTTPS://example.com'],
+            'colon after slash'     => ['/a:b'],
+            'colon in query'        => ['?q=a:b'],
+            'host:port http'        => ['http://example.com:8080/x'],
         ];
     }
 
@@ -50,6 +53,13 @@ final class UrlValidatorTest extends TestCase
             'protocol-relative'          => ['//evil.example'],
             'backslash-prefixed'         => ['\\\\evil.example'],
             'other scheme'               => ['ftp://files.example.com'],
+            // parse_url() reads "javascript:1" as host "javascript" + port 1 (no scheme);
+            // browsers still run it, and "1/alert(1)" is valid JavaScript.
+            'host:port lookalike'        => ['javascript:1'],
+            'host:port lookalike + path' => ['javascript:1/alert(1)'],
+            'host:port lookalike, case'  => ['JavaScript:0/alert(document.domain)'],
+            'vbscript host:port'         => ['vbscript:1'],
+            'data host:port'             => ['data:1'],
         ];
     }
 

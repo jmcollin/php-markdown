@@ -50,11 +50,12 @@ final class UrlValidator
         if (str_starts_with($url, '//') || str_starts_with($url, '\\')) {
             return false;
         }
-        $parts = parse_url(str_replace(' ', '%20', $url));
-        if ($parts === false) {
+        if (parse_url(str_replace(' ', '%20', $url)) === false) {
             return false;
         }
-        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
+        // Read the scheme the way browsers do (WHATWG URL: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":"),
+        // not from parse_url(), which reads "javascript:1/alert(1)" as host:port with no scheme.
+        $scheme = preg_match('/^([A-Za-z][A-Za-z0-9+.\-]*):/', $url, $m) === 1 ? strtolower($m[1]) : '';
         return in_array($scheme, self::SAFE_SCHEMES, true);
     }
 
