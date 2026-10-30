@@ -255,6 +255,8 @@ Dangerous URL schemes (`javascript:`, `vbscript:`, `data:`) in links are detecte
 - All `on*` event handlers, `style`, and `javascript:`/`data:` URL attributes are stripped.
 - `target="_blank"` links get `rel="noopener"` injected automatically.
 
+**Resource limits:** input is limited to `maxBytes` (1 MiB by default). Short table rows are completed with empty cells up to 100,000 cells per document; past that, they stay short.
+
 ---
 
 ## Testing

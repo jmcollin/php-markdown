@@ -35,7 +35,16 @@ use PhpMarkdown\Node\InlineNodeInterface;
  */
 final class Parser
 {
+    /**
+     * Empty cells added per document to complete short table rows. Each one costs output
+     * and memory but no input: without a limit, 1 MiB of rows like "|" under a wide
+     * header would create billions of cells.
+     */
+    private const MAX_TABLE_PADDING_CELLS = 100_000;
+
     private readonly InlineParser $inlineParser;
+
+    private int $tablePaddingLeft = self::MAX_TABLE_PADDING_CELLS;
 
     /** @var array<string, array{href: string, title: ?string}> */
     private array $linkRefs = [];
@@ -54,6 +63,7 @@ final class Parser
      */
     public function parse(array $tokens): DocumentNode
     {
+        $this->tablePaddingLeft = self::MAX_TABLE_PADDING_CELLS;
         ['refs'   => $this->linkRefs,  'tokens' => $tokens] = $this->extractLinkDefinitions($tokens);
         ['defs'   => $this->footnoteDefs, 'tokens' => $tokens] = $this->extractFootnoteDefinitions($tokens);
 
@@ -335,7 +345,7 @@ final class Parser
 
     /**
      * GFM: every row has exactly as many cells as the header — missing cells are
-     * empty, excess cells are ignored.
+     * empty, excess cells are ignored. Past MAX_TABLE_PADDING_CELLS, short rows stay short.
      *
      * @param list<string> $cells
      * @param list<string> $aligns
@@ -344,6 +354,9 @@ final class Parser
     {
         $nodes = [];
         for ($idx = 0; $idx < $columns; $idx++) {
+            if (!isset($cells[$idx]) && --$this->tablePaddingLeft < 0) {
+                break;
+            }
             $nodes[] = new TableCellNode(
                 children: $this->inlineParser->parse($cells[$idx] ?? '', $this->linkRefs, $this->footnoteDefs),
                 align: $aligns[$idx] ?? '',
