@@ -234,32 +234,56 @@ final class LexerTest extends TestCase
 
     public function testListItemDepthOne(): void
     {
-        $tokens = $this->lexer->tokenize('  - item');
+        $tokens = $this->lexer->tokenize("- a\n  - item");
 
-        $this->assertSame(1, $tokens[0]->meta['depth']);
+        $this->assertSame(1, $tokens[1]->meta['depth']);
     }
 
     public function testListItemDepthTwo(): void
     {
-        $tokens = $this->lexer->tokenize('    - item');
+        $tokens = $this->lexer->tokenize("- a\n  - b\n    - item");
 
-        $this->assertSame(2, $tokens[0]->meta['depth']);
+        $this->assertSame(2, $tokens[2]->meta['depth']);
     }
 
     public function testOrderedListItemDepth(): void
     {
-        $tokens = $this->lexer->tokenize('  1. item');
+        // Nested under "1. " the content column is 3.
+        $tokens = $this->lexer->tokenize("1. a\n   1. item");
 
-        $this->assertTrue($tokens[0]->meta['ordered']);
-        $this->assertSame(1, $tokens[0]->meta['depth']);
+        $this->assertTrue($tokens[1]->meta['ordered']);
+        $this->assertSame(1, $tokens[1]->meta['depth']);
     }
 
     public function testListItemContentUnchanged(): void
     {
-        $tokens = $this->lexer->tokenize('  - hello world');
+        $tokens = $this->lexer->tokenize("- a\n  - hello world");
 
-        $this->assertSame('hello world', $tokens[0]->content);
-        $this->assertSame(1, $tokens[0]->meta['depth']);
+        $this->assertSame('hello world', $tokens[1]->content);
+        $this->assertSame(1, $tokens[1]->meta['depth']);
+    }
+
+    public function testIndentedItemWithoutParentIsTopLevel(): void
+    {
+        // Depth comes from the open items' content columns, not from indentation alone.
+        $tokens = $this->lexer->tokenize('  - item');
+
+        $this->assertSame(0, $tokens[0]->meta['depth']);
+    }
+
+    public function testFourSpaceIndentedMarkerOutsideListIsCode(): void
+    {
+        $tokens = $this->lexer->tokenize('    - item');
+
+        $this->assertSame(TokenType::INDENTED_CODE, $tokens[0]->type);
+    }
+
+    public function testWideOrderedMarkerNestsByContentColumn(): void
+    {
+        // "10. " puts content at column 4: a 4-space bullet is its child, not depth 2.
+        $tokens = $this->lexer->tokenize("10. a\n    - b");
+
+        $this->assertSame(1, $tokens[1]->meta['depth']);
     }
 
     public function testNestedListTokenDepths(): void
@@ -455,34 +479,53 @@ final class LexerTest extends TestCase
 
     public function testTwoColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b |');
+        $tokens = $this->lexer->tokenize("| a | b |\n|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testThreeColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b | c |');
+        $tokens = $this->lexer->tokenize("| a | b | c |\n|---|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testFourColumnTableRow(): void
     {
-        $tokens = $this->lexer->tokenize('| a | b | c | d |');
+        $tokens = $this->lexer->tokenize("| a | b | c | d |\n|---|---|---|---|");
 
-        $this->assertCount(1, $tokens);
+        $this->assertCount(2, $tokens);
         $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
     }
 
     public function testTableRowWithoutLeadingPipe(): void
     {
-        $tokens = $this->lexer->tokenize('a | b | c');
+        $tokens = $this->lexer->tokenize("a | b | c\n--- | --- | ---");
+
+        $this->assertCount(2, $tokens);
+        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::TABLE_SEPARATOR, $tokens[1]->type);
+    }
+
+    public function testPipeLineWithoutDelimiterRowIsParagraph(): void
+    {
+        $tokens = $this->lexer->tokenize('I like cats | dogs | birds');
 
         $this->assertCount(1, $tokens);
-        $this->assertSame(TokenType::TABLE_ROW, $tokens[0]->type);
+        $this->assertSame(TokenType::PARAGRAPH, $tokens[0]->type);
+    }
+
+    public function testDelimiterRowWithDifferentCellCountIsNotATable(): void
+    {
+        $tokens = $this->lexer->tokenize("| a | b |\n|---|");
+
+        $this->assertNotContains(TokenType::TABLE_ROW, array_map(static fn($t) => $t->type, $tokens));
     }
 
     // ── Setext headings ──────────────────────────────────────────────────────

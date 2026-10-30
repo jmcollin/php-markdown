@@ -105,19 +105,15 @@ final class HtmlEntityDecodingTest extends TestCase
     // ── AC-8: Entities in link URL and title ─────────────────────────────────
 
     /**
-     * @todo Needs link-level entity decoding + URL percent-encoding, out of scope for story 52.
-     *       [foo](/f&ouml;&ouml; "f&ouml;&ouml;") should produce
-     *       <p><a href="/f%C3%B6%C3%B6" title="föö">foo</a></p>
-     *       but the current implementation does not decode entities in link URLs or titles.
+     * Entities in link destinations and titles are decoded (CommonMark §6.3).
+     * URLs are not percent-encoded: the renderer escapes the decoded value for HTML.
      */
     public function testAc8EntityInLinkUrlAndTitle(): void
     {
-        // Current behaviour: & in URL is HTML-escaped by the renderer's esc(); title same.
-        // When link-level entity decoding is implemented, update the assertion below.
         $result = $this->parse('[foo](/f&ouml;&ouml; "f&ouml;&ouml;")');
 
         $this->assertSame(
-            '<p><a href="/f&amp;ouml;&amp;ouml;" title="f&amp;ouml;&amp;ouml;">foo</a></p>' . "\n",
+            '<p><a href="/föö" title="föö">foo</a></p>' . "\n",
             $result,
         );
     }

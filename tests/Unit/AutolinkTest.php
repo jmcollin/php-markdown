@@ -158,14 +158,25 @@ final class AutolinkTest extends TestCase
 
     // ── Security: javascript: scheme ─────────────────────────────────────────
 
-    public function test_url_autolink_rejects_javascript_scheme(): void
+    /** @return array<string, array{string}> */
+    public static function scriptSchemeAutolinks(): array
     {
-        // CommonMark spec does not filter schemes at parse time; javascript: is a valid scheme
-        // per PATTERN_AUTOLINK_URL. The renderer calls esc() on both href and text but does NOT
-        // suppress the link. Consumers may add their own scheme filtering on top.
-        $result = $this->parse('<javascript:alert(1)>');
-        $this->assertStringContainsString('<a href=', $result);
-        $this->assertStringContainsString('javascript:alert(1)', $result);
+        return [
+            'javascript'       => ['<javascript:alert(1)>'],
+            'mixed case'       => ['<JaVaScRiPt:alert(1)>'],
+            'vbscript'         => ['<vbscript:msgbox(1)>'],
+            'data text/html'   => ['<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('scriptSchemeAutolinks')]
+    public function test_url_autolink_rejects_script_schemes(string $input): void
+    {
+        // Script-capable schemes are rendered as literal (escaped) text, never as a link,
+        // consistent with the scheme filtering applied to inline and reference links.
+        $result = $this->parse($input);
+        $this->assertStringNotContainsString('<a ', $result);
+        $this->assertStringStartsWith('&lt;', $result);
     }
 
     // ── Inline context ────────────────────────────────────────────────────────

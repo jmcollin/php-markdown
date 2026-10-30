@@ -131,6 +131,17 @@ final class MarkdownParserTest extends TestCase
         $this->assertNotEmpty($html);
     }
 
+    public function testMaxBytesIsEnforcedAfterNormalization(): void
+    {
+        // U+0958 (3 bytes) has no composed form: NFC turns it into 2 code points (6 bytes).
+        // 10 × 3 = 30 bytes fits the limit before normalization, 60 bytes does not after.
+        $parser = new MarkdownParser(maxBytes: 40);
+
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage('after Unicode normalization');
+        $parser->parse(str_repeat("\u{0958}", 10));
+    }
+
     // ── NFC normalisation ─────────────────────────────────────────────────────
 
     public function testNfcNormalisationConvertsNfdInput(): void
@@ -321,7 +332,9 @@ final class MarkdownParserTest extends TestCase
 
     public function testNestedBlockquoteMixedLevels(): void
     {
-        $md = "> outer\n> > inner\n> outer again";
+        // The blank ">" line closes the inner paragraph; without it "> outer again"
+        // would be a lazy continuation of "inner" (CommonMark §5.1).
+        $md = "> outer\n> > inner\n>\n> outer again";
         $html = $this->parser->parse($md);
 
         $this->assertSame(
@@ -343,7 +356,7 @@ final class MarkdownParserTest extends TestCase
 
     public function testLevelDecreaseThenIncrease(): void
     {
-        $md = "> a\n> > b\n> c\n> > d";
+        $md = "> a\n> > b\n>\n> c\n> > d";
         $html = $this->parser->parse($md);
 
         $this->assertSame(
@@ -427,20 +440,20 @@ final class MarkdownParserTest extends TestCase
     public function testCheckedTaskItemRendersCheckbox(): void
     {
         $html = $this->parser->parse('- [x] Done');
-        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled checked> Done</li>\n</ul>\n", $html);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" checked=\"\" disabled=\"\" /> Done</li>\n</ul>\n", $html);
     }
 
     public function testUncheckedTaskItemRendersCheckbox(): void
     {
         $html = $this->parser->parse('- [ ] Todo');
-        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled> Todo</li>\n</ul>\n", $html);
+        $this->assertSame("<ul>\n<li><input type=\"checkbox\" disabled=\"\" /> Todo</li>\n</ul>\n", $html);
     }
 
     public function testMixedTaskList(): void
     {
         $html = $this->parser->parse("- [x] done\n- [ ] todo\n- plain");
-        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
-        $this->assertStringContainsString('<input type="checkbox" disabled>', $html);
+        $this->assertStringContainsString('<input type="checkbox" checked="" disabled="" />', $html);
+        $this->assertStringContainsString('<input type="checkbox" disabled="" />', $html);
         $this->assertStringContainsString('<li>plain</li>', $html);
     }
 
@@ -448,7 +461,7 @@ final class MarkdownParserTest extends TestCase
     {
         $html = $this->parser->parse('- [x] **bold** done');
         $this->assertMatchesRegularExpression(
-            '/<li><input type="checkbox" disabled checked> <strong>bold<\/strong>/',
+            '/<li><input type="checkbox" checked="" disabled="" \/> <strong>bold<\/strong>/',
             $html,
         );
     }
@@ -466,14 +479,14 @@ final class MarkdownParserTest extends TestCase
     {
         $html = $this->parser->parse("1. [x] first\n2. [ ] second");
         $this->assertStringContainsString('<ol>', $html);
-        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
-        $this->assertStringContainsString('<input type="checkbox" disabled>', $html);
+        $this->assertStringContainsString('<input type="checkbox" checked="" disabled="" />', $html);
+        $this->assertStringContainsString('<input type="checkbox" disabled="" />', $html);
     }
 
     public function testUppercaseXChecked(): void
     {
         $html = $this->parser->parse('- [X] Done');
-        $this->assertStringContainsString('<input type="checkbox" disabled checked>', $html);
+        $this->assertStringContainsString('<input type="checkbox" checked="" disabled="" />', $html);
     }
 
     // ── Hard line breaks (CommonMark §6.7) ───────────────────────────────────

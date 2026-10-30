@@ -16,6 +16,8 @@ final readonly class ListNode implements BlockNodeInterface
         public bool $loose = false,
         /** @var ListItemNode[] */
         public array $children = [],
+        /** First number of an ordered list (null for bullet lists). */
+        public ?int $start = null,
     ) {
     }
 }

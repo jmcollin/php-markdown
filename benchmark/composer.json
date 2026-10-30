@@ -1,0 +1,27 @@
+{
+  "name": "php-markdown/benchmark",
+  "description": "Benchmark comparing PHP Markdown parsers",
+  "type": "project",
+  "license": "MIT",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "repositories": [
+    {
+      "type": "path",
+      "url": "..",
+      "options": {
+        "symlink": false
+      }
+    }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "php-markdown/parser": "dev-main",
+    "league/commonmark": "^2",
+    "erusev/parsedown": "^1.7",
+    "michelf/php-markdown": "^2"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
