@@ -59,16 +59,20 @@ require '/path/to/src/Node/Inline/LinkNode.php';
 require '/path/to/src/Node/Inline/ImageNode.php';
 require '/path/to/src/Node/Inline/AutolinkNode.php';
 require '/path/to/src/Node/Inline/HardBreakNode.php';
+require '/path/to/src/Node/Inline/SoftBreakNode.php';
 require '/path/to/src/Node/Inline/HtmlEntityNode.php';
 require '/path/to/src/Node/Inline/RawHtmlInlineNode.php';
 require '/path/to/src/Node/Inline/FootnoteRefNode.php';
 require '/path/to/src/Normalizer/NormalizerInterface.php';
 require '/path/to/src/Normalizer/IcuNormalizer.php';
+require '/path/to/src/Sanitizer/UrlValidator.php';
 require '/path/to/src/Sanitizer/HtmlSanitizer.php';
 require '/path/to/src/Lexer/TokenType.php';
 require '/path/to/src/Lexer/Token.php';
+require '/path/to/src/Lexer/TableCells.php';
 require '/path/to/src/Lexer/Lexer.php';
 require '/path/to/src/Parser/DelimiterRun.php';
+require '/path/to/src/Parser/DelimiterEntry.php';
 require '/path/to/src/Parser/FlankingComputer.php';
 require '/path/to/src/Parser/DelimiterStack.php';
 require '/path/to/src/Parser/InlineParser.php';
@@ -164,6 +168,23 @@ Raw HTML is escaped by default (XSS-safe). Opt in to sanitized pass-through with
 $html = $parser->parse('<div class="note">text</div>', allowRawHtml: true);
 // <div class="note">text</div>  — dangerous tags/attrs stripped by HtmlSanitizer
 ```
+
+### Options
+
+All constructor arguments are optional and named:
+
+```php
+$parser = new MarkdownParser(
+    maxBytes: 1_048_576,   // default; larger input throws ParseException (checked before and after NFC normalization)
+    linkTarget: '_blank',  // adds target="…" to every rendered link and autolink
+    linkRel: 'nofollow',   // adds rel="…"; "noopener" is appended automatically when target is _blank
+);
+
+echo $parser->parse('[a](/x)');
+// <p><a href="/x" target="_blank" rel="nofollow noopener">a</a></p>
+```
+
+A custom `NormalizerInterface` can also be passed as `normalizer:` (defaults to `IcuNormalizer`).
 
 ---
 
