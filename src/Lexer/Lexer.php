@@ -129,6 +129,9 @@ final class Lexer
             $tableColumns = 0;
             $line     = rtrim($raw, "\r");
             $expanded = $this->expandTabs($line);
+            // Every block pattern starts (after optional indentation) with a known byte:
+            // checking it first skips the regexes that cannot match this line.
+            $first    = ltrim($line, " \t")[0] ?? '';
 
             // Collect lines for an in-progress HTML block.
             // The block ends on the first blank line (CommonMark §4.6 type 6/7).
@@ -198,7 +201,7 @@ final class Lexer
                 continue;
             }
 
-            if (preg_match(self::PATTERN_COLUMNS_OPEN, $line)) {
+            if ($first === ':' && preg_match(self::PATTERN_COLUMNS_OPEN, $line)) {
                 foreach ($pendingLines as $pt) {
                     $tokens[] = $pt;
                 }
@@ -211,7 +214,9 @@ final class Lexer
             }
 
             if ($inFencedBlock) {
-                if (preg_match('/^ {0,3}' . preg_quote($fenceChar, '/') . '{' . $fenceLength . ',}\s*$/', $line)) {
+                if ($first === $fenceChar
+                    && preg_match('/^ {0,3}' . preg_quote($fenceChar, '/') . '{' . $fenceLength . ',}\s*$/', $line)
+                ) {
                     foreach ($pendingLines as $pt) {
                         $tokens[] = $pt;
                     }
@@ -232,7 +237,7 @@ final class Lexer
                 continue;
             }
 
-            if (preg_match(self::PATTERN_FENCED_OPEN, $line, $m)) {
+            if (($first === '`' || $first === '~') && preg_match(self::PATTERN_FENCED_OPEN, $line, $m)) {
                 foreach ($pendingLines as $pt) {
                     $tokens[] = $pt;
                 }
@@ -248,7 +253,7 @@ final class Lexer
             // HTML block detection (CommonMark §4.6).
             // Must run before setext/paragraph logic so that block-level HTML tags
             // are not consumed as paragraphs.
-            if (preg_match($this->patternHtmlBlockStart, $line)) {
+            if ($first === '<' && preg_match($this->patternHtmlBlockStart, $line)) {
                 foreach ($pendingLines as $pt) {
                     $tokens[] = $pt;
                 }
@@ -296,13 +301,13 @@ final class Lexer
 
             // Setext heading detection: pending text lines followed by === or ---
             if ($pendingLines !== []) {
-                if (preg_match(self::PATTERN_SETEXT_H1, $line)) {
+                if ($first === '=' && preg_match(self::PATTERN_SETEXT_H1, $line)) {
                     $content = implode(' ', array_map(fn(Token $t) => $t->content, $pendingLines));
                     $tokens[] = new Token(TokenType::HEADING, $content, ['level' => 1]);
                     $pendingLines = [];
                     continue;
                 }
-                if (preg_match(self::PATTERN_SETEXT_H2, $line)) {
+                if ($first === '-' && preg_match(self::PATTERN_SETEXT_H2, $line)) {
                     $content = implode(' ', array_map(fn(Token $t) => $t->content, $pendingLines));
                     $tokens[] = new Token(TokenType::HEADING, $content, ['level' => 2]);
                     $pendingLines = [];
@@ -339,12 +344,16 @@ final class Lexer
 
             // Indented code block drain (continuation).
             if ($inIndentedBlock) {
-                if (preg_match('/^    (.*)$/s', $expanded, $m)
+                if (str_starts_with($expanded, '    ')
                     && !preg_match(self::PATTERN_UNORDERED_LIST, $line)
                     && !preg_match(self::PATTERN_ORDERED_LIST, $line)
                 ) {
-                    $indentedLines = [...$indentedLines, ...$pendingBlanks, $this->stripLeadingColumns($line, 4)];
-                    $pendingBlanks = [];
+                    // Appended in place: rebuilding the array per line would be quadratic.
+                    foreach ($pendingBlanks as $blank) {
+                        $indentedLines[] = $blank;
+                    }
+                    $indentedLines[] = $this->stripLeadingColumns($line, 4);
+                    $pendingBlanks   = [];
                     continue;
                 }
                 if ($line === '' || ctype_space($line)) {
@@ -392,7 +401,7 @@ final class Lexer
             // Start new indented code block (only when no paragraph was active). A line
             // indented 4+ columns is a list item only inside an open list.
             if (!$hadPendingLines
-                && preg_match('/^    (.*)$/s', $expanded, $m)
+                && str_starts_with($expanded, '    ')
                 && (!$this->lastNonBlankIsListItem($tokens, $listOpenCache)
                     || (!preg_match(self::PATTERN_UNORDERED_LIST, $line) && !preg_match(self::PATTERN_ORDERED_LIST, $line)))
             ) {
@@ -766,11 +775,14 @@ final class Lexer
             return new Token(TokenType::BLANK, '');
         }
 
-        if (preg_match(self::PATTERN_HORIZONTAL_RULE, $line)) {
+        // Each pattern below needs a specific first byte after the indentation.
+        $first = ltrim($line, " \t")[0] ?? '';
+
+        if (($first === '-' || $first === '*' || $first === '_') && preg_match(self::PATTERN_HORIZONTAL_RULE, $line)) {
             return new Token(TokenType::HORIZONTAL_RULE, '');
         }
 
-        if (preg_match(self::PATTERN_HEADING, $line, $m)) {
+        if ($first === '#' && preg_match(self::PATTERN_HEADING, $line, $m)) {
             // Strip the optional closing sequence: '#'s preceded by whitespace (or alone).
             $content = (string) preg_replace('/(?:^|[ \t]+)#+[ \t]*$/', '', trim($m[2] ?? '', " \t"));
             return new Token(
@@ -780,7 +792,7 @@ final class Lexer
             );
         }
 
-        if (preg_match(self::PATTERN_BLOCKQUOTE, $line, $m)) {
+        if ($first === '>' && preg_match(self::PATTERN_BLOCKQUOTE, $line, $m)) {
             // Compute inner content from the expanded line using the CommonMark §5.1 rule:
             // each '>' marker consumes the '>' character and optionally one space.
             // Operating on the expanded form ensures tabs in the prefix are correctly handled.
@@ -795,7 +807,7 @@ final class Lexer
         }
 
         // 'depth' is a placeholder: tokenize() computes it from the open items' columns.
-        if (preg_match(self::PATTERN_UNORDERED_LIST, $line, $m)) {
+        if (($first === '-' || $first === '*' || $first === '+') && preg_match(self::PATTERN_UNORDERED_LIST, $line, $m)) {
             [$content, $checked] = $this->extractTaskChecked(trim($m[4] ?? ''));
             return new Token(
                 TokenType::LIST_ITEM,
@@ -812,7 +824,7 @@ final class Lexer
             );
         }
 
-        if (preg_match(self::PATTERN_ORDERED_LIST, $line, $m)) {
+        if (ctype_digit($first) && preg_match(self::PATTERN_ORDERED_LIST, $line, $m)) {
             [$content, $checked] = $this->extractTaskChecked(trim($m[5] ?? ''));
             return new Token(
                 TokenType::LIST_ITEM,
@@ -831,7 +843,7 @@ final class Lexer
 
         // Footnote definition: [^label]: body — must run before LINK_DEFINITION
         // because [^label]: body also matches PATTERN_LINK_DEFINITION (label=[^label], href=body).
-        if (preg_match(self::PATTERN_FOOTNOTE_DEF, $line, $m)) {
+        if ($first === '[' && preg_match(self::PATTERN_FOOTNOTE_DEF, $line, $m)) {
             return new Token(
                 TokenType::FOOTNOTE_DEFINITION,
                 $line,
@@ -840,7 +852,7 @@ final class Lexer
         }
 
         // URL validation is intentionally deferred to UrlValidator::isSafe() at resolution time.
-        if (preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
+        if ($first === '[' && preg_match(self::PATTERN_LINK_DEFINITION, $line, $m)) {
             // Groups: 2=angle-bracket URL content (stripped), 3=bare URL.
             // When the angle-bracket branch <(...)> matches, $m[3] is absent or empty ''.
             // When the bare URL branch (\S+) matches, $m[3] is non-empty (bare URLs cannot be empty).
@@ -886,7 +898,7 @@ final class Lexer
         }
 
         // Odd number of trailing backslashes = unescaped final backslash → hard break (CommonMark §6.7).
-        if (preg_match('/\\\\+$/', $line, $m) && strlen($m[0]) % 2 === 1) {
+        if (str_ends_with($line, '\\') && preg_match('/\\\\+$/', $line, $m) && strlen($m[0]) % 2 === 1) {
             return new Token(
                 TokenType::PARAGRAPH,
                 substr($line, 0, -1),
