@@ -69,44 +69,46 @@ final class HtmlRenderer
 
     private function renderNode(NodeInterface $node): string
     {
-        return match (true) {
-            $node instanceof HeadingNode      => $this->renderHeading($node),
-            $node instanceof ParagraphNode    => '<p>' . $this->renderInline($node->children) . "</p>\n",
-            $node instanceof BlockquoteNode   => "<blockquote>\n" . $this->renderChildren($node->children) . "</blockquote>\n",
-            $node instanceof ListNode         => $this->renderList($node),
-            $node instanceof ListItemNode     => $this->renderListItem($node),
-            $node instanceof FencedCodeNode   => $this->renderFencedCode($node),
-            $node instanceof IndentedCodeNode => '<pre><code>' . $this->esc($node->content) . "</code></pre>\n",
-            $node instanceof HorizontalRuleNode => "<hr />\n",
-            $node instanceof ColumnsNode       => $this->renderColumns($node),
+        // Constant class names compile to a hash lookup, unlike a chain of instanceof.
+        // Exact match: all node classes are final.
+        return match ($node::class) {
+            HeadingNode::class      => $this->renderHeading($node),
+            ParagraphNode::class    => '<p>' . $this->renderInline($node->children) . "</p>\n",
+            BlockquoteNode::class   => "<blockquote>\n" . $this->renderChildren($node->children) . "</blockquote>\n",
+            ListNode::class         => $this->renderList($node),
+            ListItemNode::class     => $this->renderListItem($node),
+            FencedCodeNode::class   => $this->renderFencedCode($node),
+            IndentedCodeNode::class => '<pre><code>' . $this->esc($node->content) . "</code></pre>\n",
+            HorizontalRuleNode::class => "<hr />\n",
+            ColumnsNode::class       => $this->renderColumns($node),
             // Raw HTML blocks: sanitize if allowRawHtml, else escape (XSS-safe default).
-            $node instanceof RawHtmlBlockNode =>
+            RawHtmlBlockNode::class =>
                 $this->allowRawHtml
                     ? $this->sanitizer->sanitize($node->content) . "\n"
                     : $this->esc($node->content) . "\n",
-            $node instanceof HardBreakNode    => "<br />\n",
-            $node instanceof SoftBreakNode    => "\n",
+            HardBreakNode::class    => "<br />\n",
+            SoftBreakNode::class    => "\n",
             // HTML entities pass through verbatim — validated by InlineParser, no esc() needed.
-            $node instanceof HtmlEntityNode   => $node->entity,
-            $node instanceof TextNode         => $this->esc($node->text),
-            $node instanceof StrongNode       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
-            $node instanceof StrikethroughNode => '<del>' . $this->renderChildren($node->children) . '</del>',
-            $node instanceof EmphasisNode     => '<em>' . $this->renderChildren($node->children) . '</em>',
-            $node instanceof CodeNode         => '<code>' . $this->esc($node->code) . '</code>',
-            $node instanceof LinkNode         => $this->renderLink($node),
-            $node instanceof ImageNode        => $this->renderImage($node),
-            $node instanceof TableNode        => $this->renderTable($node),
-            $node instanceof TableRowNode     => $this->renderTableRow($node),
+            HtmlEntityNode::class   => $node->entity,
+            TextNode::class         => $this->esc($node->text),
+            StrongNode::class       => '<strong>' . $this->renderChildren($node->children) . '</strong>',
+            StrikethroughNode::class => '<del>' . $this->renderChildren($node->children) . '</del>',
+            EmphasisNode::class     => '<em>' . $this->renderChildren($node->children) . '</em>',
+            CodeNode::class         => '<code>' . $this->esc($node->code) . '</code>',
+            LinkNode::class         => $this->renderLink($node),
+            ImageNode::class        => $this->renderImage($node),
+            TableNode::class        => $this->renderTable($node),
+            TableRowNode::class     => $this->renderTableRow($node),
             // Inline HTML: emitted as-is if allowRawHtml — the enclosing inline run is then
             // sanitized as a whole by renderInline() — else escaped.
-            $node instanceof RawHtmlInlineNode =>
+            RawHtmlInlineNode::class =>
                 $this->allowRawHtml
                     ? $node->content
                     : $this->esc($node->content),
-            $node instanceof AutolinkNode           => $this->renderAutolink($node),
-            $node instanceof FootnoteRefNode        => $this->renderFootnoteRef($node),
-            $node instanceof FootnotesContainerNode => $this->renderFootnotesContainer($node),
-            $node instanceof FootnoteDefinitionNode => $this->renderFootnoteDefinition($node),
+            AutolinkNode::class           => $this->renderAutolink($node),
+            FootnoteRefNode::class        => $this->renderFootnoteRef($node),
+            FootnotesContainerNode::class => $this->renderFootnotesContainer($node),
+            FootnoteDefinitionNode::class => $this->renderFootnoteDefinition($node),
             default => throw new \RuntimeException('Unknown node type: ' . $node::class),
         };
     }
@@ -116,7 +118,11 @@ final class HtmlRenderer
      */
     private function renderChildren(array $nodes): string
     {
-        return implode('', array_map($this->renderNode(...), $nodes));
+        $html = '';
+        foreach ($nodes as $node) {
+            $html .= $this->renderNode($node);
+        }
+        return $html;
     }
 
     /**
@@ -310,11 +316,11 @@ final class HtmlRenderer
 
     private function renderTableRow(TableRowNode $node): string
     {
-        $cells = implode('', array_map(
-            fn(TableCellNode $cell) => $this->renderTableCell($cell, $node->isHeader),
-            $node->cells,
-        ));
-        return "<tr>\n" . $cells . "</tr>\n";
+        $html = "<tr>\n";
+        foreach ($node->cells as $cell) {
+            $html .= $this->renderTableCell($cell, $node->isHeader);
+        }
+        return $html . "</tr>\n";
     }
 
     private function renderTableCell(TableCellNode $node, bool $isHeader = false): string
