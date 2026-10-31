@@ -23,6 +23,11 @@ final class LinkSchemeBypassTest extends TestCase
             'autolink javascript'            => ['<javascript:alert(1)>'],
             'autolink vbscript'              => ['<vbscript:msgbox(1)>'],
             'autolink data'                  => ['<data:text/html;base64,PHNjcmlwdD4=>'],
+            'link, host:port lookalike'      => ['[a](javascript:1/alert(1))'],
+            'image, host:port lookalike'     => ['![a](javascript:1/alert(1))'],
+            'ref def, host:port lookalike'   => ["[a]
+
+[a]: javascript:1/alert(1)"],
         ];
     }
 

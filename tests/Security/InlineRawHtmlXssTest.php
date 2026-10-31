@@ -31,6 +31,8 @@ final class InlineRawHtmlXssTest extends TestCase
             'img slash-separated handler'  => ['hi <img/src=x/onerror=alert(1)>'],
             'href with leading space'      => ['hi <a href=" javascript:alert(1)">x</a>'],
             'href entity-encoded scheme'   => ['hi <a href="&#106;avascript:alert(1)">x</a>'],
+            'href host:port lookalike'     => ['hi <a href="javascript:1/alert(1)">x</a>'],
+            'block href host:port'         => ['<div><a href="javascript:1/alert(1)">x</a></div>'],
             'iframe'                       => ['hi <iframe src="https://evil.example"></iframe>'],
             'style tag'                    => ['<style>body{display:none}</style>'],
             'heading'                      => ['# Title <img src=x onerror=alert(1)>'],
