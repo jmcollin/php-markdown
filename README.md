@@ -278,7 +278,7 @@ Dangerous URL schemes (`javascript:`, `vbscript:`, `data:`) in links are detecte
 - All `on*` event handlers, `style`, and `javascript:`/`data:` URL attributes are stripped.
 - `target="_blank"` links get `rel="noopener"` injected automatically.
 
-**Resource limits:** input is limited to `maxBytes` (1 MiB by default). Short table rows are completed with empty cells up to 100,000 cells per document; past that, they stay short.
+**Resource limits:** input is limited to `maxBytes` (1 MiB by default). Short table rows are completed with empty cells up to 100,000 cells per document; past that, they stay short. Parse time stays roughly linear in input size on pathological input (`tests/Security`). Memory use is high at the limit: a 1 MiB document needed from about 100 MB to 800 MB in stress tests, depending on its content, so use a lower `maxBytes` with PHP's default `memory_limit` of 128 MB.
 
 ---
 
@@ -305,15 +305,15 @@ composer install   # copies the parent directory into vendor/ — re-run after c
 php benchmark-markdown.php
 ```
 
-Sample run (PHP 8.2.29, Windows x64, no OPcache/JIT), lower is better:
+Sample results (PHP 8.2.29, Windows x64, no OPcache/JIT, best time per parser over 6 runs), lower is better:
 
 | Document | php-markdown/parser | Parsedown | michelf/php-markdown | league/commonmark |
 |----------|--------------------:|----------:|---------------------:|------------------:|
-| small (1 KB, 1,000 runs) | 1.41 ms | 0.84 ms | 1.05 ms | 4.28 ms |
-| medium (10 KB, 200 runs) | 12.59 ms | 8.29 ms | 9.86 ms | 34.70 ms |
-| large (82 KB, 20 runs) | 99.77 ms | 94.75 ms | 94.51 ms | 268.79 ms |
+| small (1 KB, 1,000 runs) | 0.57 ms | 0.38 ms | 0.45 ms | 2.01 ms |
+| medium (10 KB, 200 runs) | 4.30 ms | 4.75 ms | 4.72 ms | 14.47 ms |
+| large (82 KB, 20 runs) | 35.73 ms | 32.61 ms | 37.05 ms | 117.58 ms |
 
-Timings vary by machine; compare parsers within a single run. The memory column printed by the script is the `memory_get_usage()` delta across the loop, not peak usage, so it is not reported here.
+Timings vary by machine and between runs. On the small document, the order was the same in every run. On the medium and large documents, the three fastest parsers swapped places from run to run, so their differences there are within the noise. The memory column printed by the script is the `memory_get_usage()` delta across the loop, not peak usage, so it is not reported here.
 
 ---
 
