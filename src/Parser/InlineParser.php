@@ -146,9 +146,14 @@ final class InlineParser
             return $text !== '' ? [new TextNode($text)] : [];
         }
 
+        // Plain text, the most common inline run, has nothing to scan or resolve.
+        $len = strlen($text);
+        if (strcspn($text, self::SPECIAL_CHARS) === $len) {
+            return $len > 0 ? [new TextNode($text)] : [];
+        }
+
         /** @var list<DelimiterRun|InlineNodeInterface> $tokens */
         $tokens = [];
-        $len = strlen($text);
         $pos = 0;
         $buffer = '';
         // Bracket stack as two int lists (memory: one entry per '[' of the input):
