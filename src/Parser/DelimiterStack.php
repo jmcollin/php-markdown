@@ -66,21 +66,20 @@ final class DelimiterStack
     {
         // Fast paths: without delimiter runs there is nothing to match or merge; with
         // only inert runs (literal brackets) there is nothing to match, only text to merge.
-        $plain  = [];
+        $hasRun = false;
         $active = false;
         foreach ($tokens as $token) {
             if ($token instanceof DelimiterRun) {
-                $plain = null;
+                $hasRun = true;
                 if ($token->canOpen || $token->canClose) {
                     $active = true;
                     break;
                 }
-            } elseif ($plain !== null) {
-                $plain[] = $token;
             }
         }
-        if ($plain !== null) {
-            return $plain;
+        if (!$hasRun) {
+            /** @var InlineNodeInterface[] $tokens */
+            return $tokens;
         }
         if (!$active) {
             return $this->mergeText($tokens);

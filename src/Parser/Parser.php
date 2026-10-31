@@ -230,7 +230,11 @@ final class Parser
         $group = [];
 
         foreach ($tokens as $idx => $token) {
-            $content = preg_replace('/^(?:[ ]{1,3}|\t)/', '', $token->content) ?? $token->content;
+            $content = $token->content;
+            $first   = $content[0] ?? '';
+            if ($first === ' ' || $first === "\t") {
+                $content = preg_replace('/^(?:[ ]{1,3}|\t)/', '', $content) ?? $content;
+            }
             $isHardBreak = ($token->meta['hard_break'] ?? false) === true;
             $isLast = ($idx === $lastIdx);
 
@@ -372,10 +376,13 @@ final class Parser
      */
     private function parseCells(string $line): array
     {
-        return array_map(
-            static fn(string $cell): string => str_replace('\\|', '|', $cell),
-            TableCells::split($line),
-        );
+        $cells = TableCells::split($line);
+        if (str_contains($line, '\\|')) {
+            foreach ($cells as $i => $cell) {
+                $cells[$i] = str_replace('\\|', '|', $cell);
+            }
+        }
+        return $cells;
     }
 
     /**
